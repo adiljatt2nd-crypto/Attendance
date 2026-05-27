@@ -1,0 +1,980 @@
+import { useState, useCallback, useRef } from "react";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBJECT DETECTION — maps lecture codes like "Surg43/GIT25", "Med48/GIT01",
+// "Psy01/Med49/GIT02", "Obs&Gyn/22/GIT07", "PedsSurg02/Surg38/GIT16"
+// to a clean department name.
+// ─────────────────────────────────────────────────────────────────────────────
+const DEPT_RULES = [
+  { test: /\bpsy/i, name: "Psychiatry", color: "#9B59B6" },
+  { test: /\bobs|gyn/i, name: "Obs & Gynae", color: "#E84393" },
+  { test: /\bpeds|pediatric/i, name: "Paediatrics", color: "#FF8B5E" },
+  { test: /\bsurg/i, name: "Surgery", color: "#FF6B6B" },
+  { test: /\bmed|ge\b/i, name: "Medicine", color: "#4ECDC4" },
+];
+
+function detectDept(codeStr) {
+  if (!codeStr || codeStr === "N/A") return null;
+  for (const r of DEPT_RULES) {
+    if (r.test.test(codeStr)) return { name: r.name, color: r.color };
+  }
+  return null;
+}
+
+// Parse "GIT02" → 2 (lecture number in module)
+function parseGITNum(codeStr) {
+  const m = codeStr && codeStr.match(/GIT0*(\d+)/i);
+  return m ? parseInt(m[1]) : null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TIME HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function xlFracToHHMM(f) {
+  if (f === null || f === undefined || f === "" || f === "N/A") return null;
+  const n = Number(f);
+  if (isNaN(n)) return f.includes(":") ? f.trim() : null;
+  const mins = Math.round(n * 24 * 60);
+  return `${String(Math.floor(mins/60)).padStart(2,"0")}:${String(mins%60).padStart(2,"0")}`;
+}
+
+function fmt12(hhmm) {
+  if (!hhmm) return "—";
+  const [h,m] = hhmm.split(":").map(Number);
+  return `${h>12?h-12:h||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;
+}
+
+function timeToMin(hhmm) {
+  if (!hhmm) return 0;
+  const [h,m] = hhmm.split(":").map(Number);
+  return h*60+m;
+}
+
+// Excel serial date → ISO
+function xlSerialToISO(n) {
+  const d = new Date(1899,11,30);
+  d.setDate(d.getDate() + Math.round(n));
+  return d.toISOString().slice(0,10);
+}
+
+// "Monday 27-04-2026" or "Tuesday 28-04-2026" → "2026-04-27"
+function parseDayCell(val) {
+  if (typeof val === "number") return xlSerialToISO(val);
+  if (typeof val === "string") {
+    const m = val.match(/(\d{2})-(\d{2})-(\d{4})/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  }
+  return null;
+}
+
+function today() {
+  return new Date().toISOString().slice(0,10);
+}
+
+function isoToDisplay(iso) {
+  if (!iso) return "";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function pct(a,t) {
+  return t===0?0:Math.round(a/t*100);
+}
+function needMore(attended, total, target) {
+  const t = target/100;
+  if (pct(attended,total)>=target) return 0;
+  return Math.ceil((t*total-attended)/(1-t));
+}
+function canSkip(attended, total, target) {
+  return Math.max(0, Math.floor(attended/(target/100)-total));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PARSE CSV/TSV — produces array of lecture rows
+// Each row: { topic, dept{name,color}, gitNum, date, start, end, code }
+// ─────────────────────────────────────────────────────────────────────────────
+function parseFile(raw) {
+  const lines = raw.trim().split(/\r?\n/).filter(Boolean);
+  if (lines.length < 2) return [];
+
+  const sep = lines[0].split("\t").length > lines[0].split(",").length ? "\t" : ",";
+  const clean = s => s.trim().replace(/^["']|["']$/g,"");
+  const headers = lines[0].split(sep).map(clean).map(h=>h.toLowerCase());
+
+  const col = key => {
+    const patterns = {
+      subject: ["subject","lecture","topic","name"],
+      day: ["day","date"],
+      start: ["start","from","begin"],
+      end: ["end","to","finish"],
+      teacher: ["teacher","faculty","code","instructor"],
+      room: ["room","venue","location"],
+    };
+    const pats = patterns[key] || [key];
+    return headers.findIndex(h => pats.some(p=>h.includes(p)));
+  };
+
+  const iSubj = Math.max(col("subject"),0);
+  const iDay = col("day");
+  const iStart = col("start");
+  const iEnd = col("end");
+  const iTeach = col("teacher");
+
+  const rows = [];
+  lines.slice(1).forEach(line => {
+    const cells = line.split(sep).map(clean);
+    const topic = cells[iSubj]||"";
+    if (!topic) return;
+    if (/holiday|tentative|eid|break|end of|assessment/i.test(topic)) return;
+
+    const dayRaw = iDay>=0 ? cells[iDay]||"" : "";
+    const startRaw= iStart>=0 ? cells[iStart]||"" : "";
+    const endRaw = iEnd>=0 ? cells[iEnd]||"" : "";
+    const codeRaw = iTeach>=0 ? cells[iTeach]||"" : "";
+
+    const date = parseDayCell(isNaN(Number(dayRaw)) ? dayRaw : Number(dayRaw));
+    const start = xlFracToHHMM(startRaw);
+    const end = xlFracToHHMM(endRaw);
+    const dept = detectDept(codeRaw);
+    const gitNum= parseGITNum(codeRaw);
+
+    rows.push({ topic, dept, gitNum, date, start, end, code: codeRaw });
+  });
+  return rows;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUILD SCHEDULE from parsed rows
+// subjects = unique department names (Medicine, Surgery, …)
+// lectures = individual rows with subjectId, date, start, end, topic, gitNum
+// ─────────────────────────────────────────────────────────────────────────────
+function buildSchedule(rows, existingSubjects=[]) {
+  const subMap = {};
+  existingSubjects.forEach(s => { subMap[s.name]=s; });
+  let nextSubId = existingSubjects.length ? Math.max(...existingSubjects.map(s=>s.id))+1 : 1;
+  let nextLecId = 1;
+
+  const subjects = [...existingSubjects];
+  const lectures = [];
+
+  rows.forEach(row => {
+    const deptName = row.dept ? row.dept.name : "General";
+    const deptColor = row.dept ? row.dept.color : "#6C63FF";
+
+    if (!subMap[deptName]) {
+      const s = { id: nextSubId++, name: deptName, color: deptColor };
+      subMap[deptName] = s;
+      subjects.push(s);
+    }
+    const sub = subMap[deptName];
+    lectures.push({
+      id: nextLecId++,
+      subjectId: sub.id,
+      topic: row.topic,
+      gitNum: row.gitNum,
+      code: row.code,
+      date: row.date,
+      start: row.start,
+      end: row.end,
+    });
+  });
+
+  return { subjects, lectures };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RING
+// ─────────────────────────────────────────────────────────────────────────────
+function Ring({ value, target, size=80, stroke=8, color="#6C63FF" }) {
+  const r=(size-stroke)/2, circ=2*Math.PI*r, dash=Math.min(value,100)/100*circ;
+  return (
+    <svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#EFEFEF" strokeWidth={stroke}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={value>=target?color:"#FF6B6B"} strokeWidth={stroke} strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" style={{transition:"stroke-dasharray .6s ease"}}/>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATUS CONFIG
+// ─────────────────────────────────────────────────────────────────────────────
+const STATUS = {
+  attended: { icon:"✅", label:"Attended", bg:"#E6FAF8", fg:"#2DB8AB" },
+  missed:   { icon:"❌", label:"Missed", bg:"#FFE8E8", fg:"#EF4444" },
+  cancelled:{ icon:"🚫", label:"Cancelled",bg:"#F3F4F6", fg:"#9CA3AF" },
+  holiday:  { icon:"🏖️", label:"Holiday",  bg:"#FFFBEB", fg:"#D97706" },
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROOT
+// ─────────────────────────────────────────────────────────────────────────────
+export default function App() {
+  const [subjects, setSubjects] = useState([]);
+  const [lectures, setLectures] = useState([]);
+  // attendance: { lectureId → status }
+  const [att, setAtt] = useState({});
+  const [target, setTarget] = useState(75);
+  const [tab, setTab] = useState("calendar");
+
+  // modals
+  const [calMonth, setCalMonth] = useState(() => {
+    const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+  });
+  const [dayOpen, setDayOpen] = useState(null); // ISO date
+  const [lecOpen, setLecOpen] = useState(null); // lecture obj
+  const [importOpen, setImportOpen] = useState(false);
+  const [addSubOpen, setAddSubOpen] = useState(false);
+  const [addLecOpen, setAddLecOpen] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (msg, err=false) => {
+    setToast({msg,err});
+    setTimeout(()=>setToast(null), 2800);
+  };
+
+  // ── Mark ─────────────────────────────────────────────────────────────────
+  const mark = (lecId, status) => {
+    setAtt(p => ({...p, [lecId]: status}));
+    setLecOpen(null);
+    showToast(`Marked as ${status}`);
+  };
+
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const subStats = useCallback((subId) => {
+    const lecs = lectures.filter(l=>l.subjectId===subId && l.date);
+    const relevant = lecs.filter(l=>{ const s=att[l.id]; return s!=="cancelled"&&s!=="holiday"; });
+    const attended = relevant.filter(l=>att[l.id]==="attended").length;
+    return { total: relevant.length, attended, pct: pct(attended, relevant.length) };
+  }, [lectures, att]);
+
+  const overall = useCallback(() => {
+    let tot=0,atd=0;
+    subjects.forEach(s=>{const st=subStats(s.id);tot+=st.total;atd+=st.attended;});
+    return {total:tot,attended:atd,pct:pct(atd,tot)};
+  },[subjects,subStats]);
+
+  // ── Lectures on date ──────────────────────────────────────────────────────
+  const lecsOnDate = useCallback((iso) =>
+    lectures.filter(l=>l.date===iso).sort((a,b)=>timeToMin(a.start)-timeToMin(b.start))
+  ,[lectures]);
+
+  // ── Import ────────────────────────────────────────────────────────────────
+  const doImport = (raw) => {
+    const rows = parseFile(raw);
+    if (!rows.length) { showToast("No lectures found — check format",true); return; }
+    const { subjects: newSubs, lectures: newLecs } = buildSchedule(rows, subjects);
+
+    setSubjects(newSubs);
+    setLectures(prev => {
+      // avoid duplicates by topic+date
+      const existing = new Set(prev.map(l=>`${l.topic}|${l.date}`));
+      const toAdd = newLecs.filter(l=>!existing.has(`${l.topic}|${l.date}`));
+      return [...prev, ...toAdd];
+    });
+    setImportOpen(false);
+    const newSubCount = newSubs.length - subjects.length;
+    showToast(`Imported ${newLecs.length} lectures${newSubCount>0?`, ${newSubCount} new departments`:""}`);
+  };
+
+  // ── Delete subject ────────────────────────────────────────────────────────
+  const deleteSub = (subId) => {
+    if (!confirm("Delete this department and all its lectures?")) return;
+    const ids = lectures.filter(l=>l.subjectId===subId).map(l=>l.id);
+    setSubjects(p=>p.filter(s=>s.id!==subId));
+    setLectures(p=>p.filter(l=>l.subjectId!==subId));
+    setAtt(p=>{ const n={...p}; ids.forEach(id=>delete n[id]); return n; });
+    showToast("Deleted");
+  };
+
+  // ── Print report ──────────────────────────────────────────────────────────
+  const printReport = () => {
+    const ov = overall();
+    const rows = subjects.map(s=>{
+      const st=subStats(s.id);
+      return `<tr>
+        <td style="border-left:4px solid ${s.color};padding-left:10px">${s.name}</td>
+        <td>${st.attended}</td><td>${st.total}</td>
+        <td style="font-weight:700;color:${st.pct>=target?"#2DB8AB":"#EF4444"}">${st.pct}%</td>
+        <td style="color:${st.pct>=target?"#16A34A":"#DC2626"}">${st.pct>=target?`Safe — can miss ${canSkip(st.attended,st.total,target)} more`:`Need ${needMore(st.attended,st.total,target)} more`}</td>
+      </tr>`;
+    }).join("");
+    // lecture log
+    const lecRows = lectures.filter(l=>l.date&&att[l.id]).sort((a,b)=>a.date.localeCompare(b.date)).map(l=>{
+      const sub=subjects.find(s=>s.id===l.subjectId);
+      const s=STATUS[att[l.id]];
+      return `<tr><td>${isoToDisplay(l.date)}</td><td>${sub?.name||""}</td><td>${l.topic}</td><td style="color:${s.fg}">${s.icon} ${s.label}</td></tr>`;
+    }).join("");
+
+    const win=window.open("","_blank");
+    win.document.write(`<!DOCTYPE html><html><head><title>Attendance Report</title>
+      <style>body{font-family:sans-serif;padding:28px;color:#111;max-width:900px;margin:0 auto}
+      h1{color:#6C63FF}h2{color:#374151;margin-top:28px;font-size:16px}
+      .summary{display:flex;gap:20px;margin:16px 0;flex-wrap:wrap}
+      .stat{background:#f5f5ff;border-radius:10px;padding:14px 20px;text-align:center;min-width:90px}
+      .stat .v{font-size:28px;font-weight:800;color:#6C63FF}.stat .l{font-size:11px;color:#666;margin-top:2px}
+      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+      th{background:#6C63FF;color:#fff;padding:9px 12px;text-align:left}
+      td{padding:8px 12px;border-bottom:1px solid #eee}
+      tr:nth-child(even){background:#fafafa}
+      @media print{.noprint{display:none}}</style></head><body>
+      <h1>📊 LectureTrack — Attendance Report</h1>
+      <p style="color:#666">Generated: ${new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})} · Target: ${target}%</p>
+      <div class="summary">
+        <div class="stat"><div class="v">${ov.pct}%</div><div class="l">Overall</div></div>
+        <div class="stat"><div class="v">${ov.attended}</div><div class="l">Attended</div></div>
+        <div class="stat"><div class="v">${ov.total}</div><div class="l">Total</div></div>
+        <div class="stat"><div class="v">${canSkip(ov.attended,ov.total,target)}</div><div class="l">Can Skip</div></div>
+      </div>
+      <h2>Department Summary</h2>
+      <table><thead><tr><th>Department</th><th>Attended</th><th>Total</th><th>%</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      ${lecRows?`<h2>Lecture Log</h2><table><thead><tr><th>Date</th><th>Dept</th><th>Topic</th><th>Status</th></tr></thead><tbody>${lecRows}</tbody></table>`:""}
+      <br><button class="noprint" onclick="window.print()" style="padding:12px 24px;background:#6C63FF;color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer">🖨️ Print / Save PDF</button>
+      </body></html>`);
+    win.document.close();
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const ov = overall();
+  const [yr,mo] = calMonth.split("-").map(Number);
+
+  return (
+    <div style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#F4F5FB",minHeight:"100vh",maxWidth:480,margin:"0 auto",paddingBottom:84}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}
+        ::-webkit-scrollbar{display:none}
+        .card{background:#fff;border-radius:18px;box-shadow:0 2px 10px #0001}
+        .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:transform .12s;outline:none}
+        .btn:active{transform:scale(.95)}
+        input,select,textarea{font-family:inherit;border:1.5px solid #E5E7EB;border-radius:11px;padding:10px 13px;font-size:14px;outline:none;width:100%;background:#fff;transition:border .2s}
+        input:focus,select:focus,textarea:focus{border-color:#6C63FF}
+        label{font-size:12px;font-weight:600;color:#6B7280;display:block;margin:12px 0 4px}
+        .overlay{position:fixed;inset:0;background:#00000050;z-index:60;display:flex;align-items:flex-end;justify-content:center}
+        .sheet{background:#fff;border-radius:22px 22px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;padding:22px}
+        .slide{animation:su .22s ease} @keyframes su{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .chip{display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+        .pulse{animation:pl 1.8s infinite} @keyframes pl{0%,100%{opacity:1}50%{opacity:.45}}
+      `}</style>
+
+      {/* HEADER */}
+      <div style={{background:"linear-gradient(140deg,#6C63FF,#4ECDC4)",padding:"20px 18px 30px",color:"#fff"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div>
+            <div style={{fontSize:11,opacity:.8,letterSpacing:.5}}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+            <div style={{fontSize:23,fontWeight:800,letterSpacing:-.3}}>LectureTrack</div>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button className="btn" onClick={printReport} style={{padding:"7px 11px",background:"#fff2",color:"#fff",fontSize:12}}>🖨️</button>
+            <button className="btn" onClick={()=>setImportOpen(true)} style={{padding:"7px 11px",background:"#fff2",color:"#fff",fontSize:12}}>⬆️ Import</button>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          {[{v:`${ov.pct}%`,l:"Overall"},{v:ov.attended,l:"Attended"},{v:ov.total,l:"Total"},{v:canSkip(ov.attended,ov.total,target),l:"Can Skip"}].map(s=>(
+            <div key={s.l} style={{flex:1,background:"#fff2",borderRadius:12,padding:"9px 6px",textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:800}}>{s.v}</div>
+              <div style={{fontSize:9,opacity:.85,marginTop:1}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* BODY */}
+      <div style={{padding:"0 13px",marginTop:-13}}>
+        {tab==="calendar" && <CalTab yr={yr} mo={mo} calMonth={calMonth} setCalMonth={setCalMonth} lecsOnDate={lecsOnDate} subjects={subjects} att={att} setDayOpen={setDayOpen}/>}
+        {tab==="attendance" && <AttTab subjects={subjects} subStats={subStats} target={target} setTarget={setTarget} lectures={lectures} att={att} setLecOpen={setLecOpen} needMore={needMore} canSkip={canSkip}/>}
+        {tab==="subjects" && <SubTab subjects={subjects} setSubjects={setSubjects} lectures={lectures} setLectures={setLectures} subStats={subStats} target={target} deleteSub={deleteSub} setAddSubOpen={setAddSubOpen} setAddLecOpen={setAddLecOpen} att={att} setLecOpen={setLecOpen}/>}
+        {tab==="bunk" && <BunkTab subjects={subjects} subStats={subStats} target={target} needMore={needMore} canSkip={canSkip}/>}
+      </div>
+
+      {/* BOTTOM NAV */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:"1px solid #F0F0F5",display:"flex",zIndex:40,boxShadow:"0 -3px 18px #0002"}}>
+        {[{id:"calendar",icon:"📅",label:"Calendar"},{id:"attendance",icon:"📊",label:"Attendance"},{id:"subjects",icon:"📚",label:"Subjects"},{id:"bunk",icon:"🧮",label:"Bunk Calc"}].map(t=>(
+          <button key={t.id} className="btn" onClick={()=>setTab(t.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"9px 0 7px",color:tab===t.id?"#6C63FF":"#9CA3AF",background:"none",borderRadius:0,fontSize:10,fontWeight:tab===t.id?700:500}}>
+            <span style={{fontSize:19}}>{t.icon}</span>{t.label}
+            {tab===t.id&&<div style={{width:18,height:3,background:"#6C63FF",borderRadius:2}}/>}
+          </button>
+        ))}
+      </div>
+
+      {/* DAY MODAL */}
+      {dayOpen && (
+        <div className="overlay" onClick={()=>setDayOpen(null)}>
+          <div className="sheet slide" onClick={e=>e.stopPropagation()}>
+            <DaySheet date={dayOpen} lecsOnDate={lecsOnDate} subjects={subjects} att={att} setLecOpen={setLecOpen} onClose={()=>setDayOpen(null)}/>
+          </div>
+        </div>
+      )}
+
+      {/* LECTURE DETAIL MODAL */}
+      {lecOpen && (
+        <div className="overlay" onClick={()=>setLecOpen(null)}>
+          <div className="sheet slide" onClick={e=>e.stopPropagation()}>
+            <LecSheet lec={lecOpen} subjects={subjects} att={att} mark={mark} onClose={()=>setLecOpen(null)}/>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT MODAL */}
+      {importOpen && (
+        <div className="overlay" onClick={()=>setImportOpen(false)}>
+          <div className="sheet slide" onClick={e=>e.stopPropagation()}>
+            <ImportSheet onImport={doImport} onClose={()=>setImportOpen(false)}/>
+          </div>
+        </div>
+      )}
+
+      {/* ADD SUBJECT */}
+      {addSubOpen && (
+        <div className="overlay" onClick={()=>setAddSubOpen(false)}>
+          <div className="sheet slide" onClick={e=>e.stopPropagation()}>
+            <AddSubSheet onSave={s=>{setSubjects(p=>[...p,{...s,id:Date.now()}]);setAddSubOpen(false);showToast("Department added");}} onClose={()=>setAddSubOpen(false)}/>
+          </div>
+        </div>
+      )}
+
+      {/* ADD LECTURE */}
+      {addLecOpen && (
+        <div className="overlay" onClick={()=>setAddLecOpen(false)}>
+          <div className="sheet slide" onClick={e=>e.stopPropagation()}>
+            <AddLecSheet subjects={subjects} onSave={l=>{setLectures(p=>[...p,{...l,id:Date.now()}]);setAddLecOpen(false);showToast("Lecture added");}} onClose={()=>setAddLecOpen(false)}/>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST */}
+      {toast&&(
+        <div style={{position:"fixed",bottom:90,left:"50%",transform:"translateX(-50%)",background:toast.err?"#EF4444":"#1F2937",color:"#fff",padding:"10px 18px",borderRadius:12,fontSize:13,fontWeight:500,zIndex:200,animation:"su .2s ease",whiteSpace:"nowrap",boxShadow:"0 4px 18px #0003"}}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALENDAR TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function CalTab({ yr, mo, calMonth, setCalMonth, lecsOnDate, subjects, att, setDayOpen }) {
+  const todayISO = today();
+  const days = new Date(yr,mo,0).getDate();
+  const firstDay = new Date(yr,mo-1,1).getDay();
+
+  const prevMo = () => {
+    const d=new Date(yr,mo-2,1);
+    setCalMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+  };
+  const nextMo = () => {
+    const d=new Date(yr,mo,1);
+    setCalMonth(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`);
+  };
+
+  const todayLecs = lecsOnDate(todayISO);
+
+  return (
+    <div className="slide">
+      <div className="card" style={{marginTop:18,padding:14,marginBottom:13}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <button className="btn" onClick={prevMo} style={{padding:"6px 13px",background:"#F3F4F6",color:"#374151",fontSize:13}}>‹</button>
+          <div style={{fontWeight:800,fontSize:15}}>{new Date(yr,mo-1,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"})}</div>
+          <button className="btn" onClick={nextMo} style={{padding:"6px 13px",background:"#F3F4F6",color:"#374151",fontSize:13}}>›</button>
+        </div>
+
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3}}>
+          {["S","M","T","W","T","F","S"].map((d,i)=>(
+            <div key={i} style={{textAlign:"center",fontSize:10,fontWeight:700,color:"#B0B7C3",padding:"3px 0"}}>{d}</div>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+          {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
+          {Array.from({length:days}).map((_,i)=>{
+            const day=i+1;
+            const iso=`${yr}-${String(mo).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+            const lecs=lecsOnDate(iso);
+            const isToday=iso===todayISO;
+            const hasMiss=lecs.some(l=>att[l.id]==="missed");
+            const allAtt=lecs.length>0&&lecs.every(l=>att[l.id]==="attended");
+            const hasLec=lecs.length>0;
+
+            const deptColors=[...new Set(lecs.map(l=>{
+              const s=subjects.find(x=>x.id===l.subjectId);
+              return s?.color;
+            }).filter(Boolean))].slice(0,3);
+
+            return (
+              <div key={day} onClick={()=>{ if(hasLec) setDayOpen(iso); }} style={{minHeight:50,borderRadius:10,padding:"5px 3px 3px",cursor:hasLec?"pointer":"default",
+                background:isToday?"#EEF0FF":"#fff",
+                border:isToday?"2px solid #6C63FF":"2px solid transparent",
+                display:"flex",flexDirection:"column",alignItems:"center",gap:2,transition:"background .15s"}}>
+                <span style={{fontSize:13,fontWeight:isToday?800:500,color:isToday?"#6C63FF":"#1F2937"}}>{day}</span>
+                {hasLec&&(
+                  <div style={{display:"flex",gap:2,justifyContent:"center",flexWrap:"wrap"}}>
+                    {deptColors.map((c,i)=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:c}}/>)}
+                  </div>
+                )}
+                {hasLec&&(
+                  <div style={{fontSize:8,fontWeight:700,color:hasMiss?"#EF4444":allAtt?"#2DB8AB":"#9CA3AF"}}>
+                    {hasMiss?"MISS":allAtt?"✓":`${lecs.length}`}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Today */}
+      <div style={{fontWeight:700,fontSize:14,marginBottom:9,color:"#1F2937"}}>
+        Today · {new Date().toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
+      </div>
+      {todayLecs.length===0
+        ? <div className="card" style={{padding:26,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:30,marginBottom:5}}>🎉</div>No classes today</div>
+        : todayLecs.map(l=><MiniLecCard key={l.id} lec={l} subjects={subjects} att={att} onClick={()=>setDayOpen(todayISO)}/>)
+      }
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DAY SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+function DaySheet({ date, lecsOnDate, subjects, att, setLecOpen, onClose }) {
+  const lecs = lecsOnDate(date);
+  const d = new Date(date+"T12:00:00");
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:20}}>{d.toLocaleDateString("en-IN",{weekday:"long"})}</div>
+          <div style={{color:"#9CA3AF",fontSize:13}}>{isoToDisplay(date)}</div>
+        </div>
+        <button className="btn" onClick={onClose} style={{padding:"6px 13px",background:"#F3F4F6",color:"#6B7280",fontSize:13}}>✕ Close</button>
+      </div>
+
+      {lecs.length===0
+        ? <div style={{textAlign:"center",color:"#9CA3AF",padding:32}}><div style={{fontSize:30,marginBottom:8}}>😴</div>No lectures</div>
+        : lecs.map(l=>{
+          const sub=subjects.find(s=>s.id===l.subjectId);
+          const status=att[l.id];
+          const sm=status?STATUS[status]:null;
+
+          const nowMin=new Date().getHours()*60+new Date().getMinutes();
+          const todayISO=today();
+          const isLive=date===todayISO&&l.start&&l.end&&nowMin>=timeToMin(l.start)&&nowMin<timeToMin(l.end);
+
+          return (
+            <div key={l.id} className="card" style={{marginBottom:11,padding:15,borderLeft:`4px solid ${sub?.color||"#6C63FF"}`,cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  {/* Department badge */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+                    <span className="chip" style={{background:(sub?.color||"#6C63FF")+"20",color:sub?.color||"#6C63FF"}}>
+                      {sub?.name||"General"}
+                    </span>
+                    {l.gitNum&&<span style={{fontSize:11,color:"#9CA3AF"}}>Lecture #{l.gitNum}</span>}
+                    {isLive&&<span className="chip pulse" style={{background:"#FF6B6B20",color:"#FF6B6B"}}>● LIVE</span>}
+                  </div>
+                  {/* Topic */}
+                  <div style={{fontWeight:700,fontSize:14,color:"#1F2937",lineHeight:1.35,marginBottom:5}}>{l.topic}</div>
+                  {/* Time */}
+                  {l.start&&<div style={{fontSize:12,color:"#6B7280"}}>⏰ {fmt12(l.start)}{l.end?` – ${fmt12(l.end)}`:""}</div>}
+                </div>
+                <div style={{flexShrink:0}}>
+                  {sm
+                    ? <span className="chip" style={{background:sm.bg,color:sm.fg}}>{sm.icon}</span>
+                    : <span className="chip" style={{background:"#F3F4F6",color:"#9CA3AF",fontSize:11}}>Mark ›</span>
+                  }
+                </div>
+              </div>
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+}
+
+// Mini card for calendar today view
+function MiniLecCard({ lec, subjects, att, onClick }) {
+  const sub = subjects.find(s=>s.id===lec.subjectId);
+  const sm = att[lec.id]?STATUS[att[lec.id]]:null;
+  return (
+    <div className="card" style={{marginBottom:9,padding:12,borderLeft:`4px solid ${sub?.color||"#6C63FF"}`,cursor:"pointer"}} onClick={onClick}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:600,color:sub?.color||"#6C63FF",marginBottom:2}}>{sub?.name}</div>
+          <div style={{fontSize:13,fontWeight:600,color:"#1F2937",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lec.topic}</div>
+          {lec.start&&<div style={{fontSize:11,color:"#9CA3AF",marginTop:2}}>{fmt12(lec.start)}{lec.end?` – ${fmt12(lec.end)}`:""}</div>}
+        </div>
+        {sm?<span className="chip" style={{background:sm.bg,color:sm.fg}}>{sm.icon}</span>:<span style={{fontSize:11,color:"#9CA3AF"}}>—</span>}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LECTURE DETAIL + MARK SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+function LecSheet({ lec, subjects, att, mark, onClose }) {
+  const sub = subjects.find(s=>s.id===lec.subjectId);
+  const current = att[lec.id];
+
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+        <div style={{flex:1,minWidth:0,paddingRight:10}}>
+          {sub&&<div className="chip" style={{background:sub.color+"20",color:sub.color,marginBottom:8}}>{sub.name}</div>}
+          <div style={{fontWeight:800,fontSize:17,color:"#1F2937",lineHeight:1.3}}>{lec.topic}</div>
+        </div>
+        <button className="btn" onClick={onClose} style={{padding:"6px 12px",background:"#F3F4F6",color:"#6B7280",fontSize:12,flexShrink:0}}>✕</button>
+      </div>
+
+      {/* Info grid */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}>
+        {[
+          ["📅 Date", lec.date?isoToDisplay(lec.date):"—"],
+          ["⏰ Time", lec.start?`${fmt12(lec.start)}${lec.end?` – ${fmt12(lec.end)}`:""}`:"—"],
+          ["📖 Lecture #", lec.gitNum||"—"],
+          ["🏷️ Code", lec.code||"—"],
+        ].map(([lbl,val])=>(
+          <div key={lbl} style={{background:"#F9FAFB",borderRadius:11,padding:"9px 11px"}}>
+            <div style={{fontSize:11,color:"#9CA3AF",marginBottom:2}}>{lbl}</div>
+            <div style={{fontWeight:600,fontSize:13,color:"#1F2937",wordBreak:"break-word"}}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>Mark Attendance</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+        {Object.entries(STATUS).map(([status,{icon,label,bg,fg}])=>(
+          <button key={status} className="btn" onClick={()=>mark(lec.id,status)}
+            style={{padding:"13px 8px",background:current===status?fg:bg,color:current===status?"#fff":fg,border:`1.5px solid ${fg}30`,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+
+      {current&&(
+        <button className="btn" onClick={()=>mark(lec.id,undefined)} style={{width:"100%",padding:11,background:"#F3F4F6",color:"#9CA3AF",fontSize:13,marginTop:8}}>
+          Clear Mark
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ATTENDANCE TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function AttTab({ subjects, subStats, target, setTarget, lectures, att, setLecOpen, needMore, canSkip }) {
+  const [expanded, setExpanded] = useState(null);
+
+  let tot=0,atd=0;
+  subjects.forEach(s=>{const st=subStats(s.id);tot+=st.total;atd+=st.attended;});
+  const ovPct=pct(atd,tot);
+
+  return (
+    <div className="slide">
+      {/* Overall card */}
+      <div className="card" style={{padding:18,marginTop:18,display:"flex",gap:14,alignItems:"center",marginBottom:13}}>
+        <div style={{position:"relative",width:86,height:86,flexShrink:0}}>
+          <Ring value={ovPct} target={target} size={86} stroke={8}/>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{fontSize:20,fontWeight:800,color:ovPct>=target?"#6C63FF":"#EF4444"}}>{ovPct}%</div>
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:3}}>Overall Attendance</div>
+          <div style={{color:"#6B7280",fontSize:13,marginBottom:7}}>{atd} of {tot} classes</div>
+          <div style={{fontSize:13,fontWeight:600,color:ovPct>=target?"#2DB8AB":"#EF4444",marginBottom:9}}>
+            {ovPct>=target?`✅ Can skip ${canSkip(atd,tot,target)} more`:`⚠️ Need ${needMore(atd,tot,target)} more for ${target}%`}
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            {[75,80,85].map(t=>(
+              <button key={t} className="btn" onClick={()=>setTarget(t)} style={{padding:"4px 11px",fontSize:12,background:target===t?"#6C63FF":"#F3F4F6",color:target===t?"#fff":"#6B7280",borderRadius:9}}>
+                {t}%
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {subjects.length===0&&(
+        <div className="card" style={{padding:30,textAlign:"center",color:"#9CA3AF"}}>
+          <div style={{fontSize:30,marginBottom:7}}>📊</div>Import your timetable to begin tracking
+        </div>
+      )}
+
+      {subjects.map(sub=>{
+        const st=subStats(sub.id);
+        const isExp=expanded===sub.id;
+        const subLecs=lectures.filter(l=>l.subjectId===sub.id&&l.date&&att[l.id]).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+
+        return (
+          <div key={sub.id} className="card" style={{marginBottom:11,overflow:"hidden"}}>
+            <div style={{padding:"14px 14px 11px",cursor:"pointer"}} onClick={()=>setExpanded(isExp?null:sub.id)}>
+              <div style={{display:"flex",alignItems:"center",gap:11}}>
+                <div style={{position:"relative",width:62,height:62,flexShrink:0}}>
+                  <Ring value={st.pct} target={target} size={62} stroke={6} color={sub.color}/>
+                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <span style={{fontSize:13,fontWeight:800,color:st.pct>=target?sub.color:"#EF4444"}}>{st.pct}%</span>
+                  </div>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:700,fontSize:15}}>{sub.name}</div>
+                  <div style={{fontSize:12,color:"#9CA3AF",marginBottom:3}}>{st.attended}/{st.total} attended</div>
+                  <div style={{fontSize:12,fontWeight:600,color:st.pct>=target?"#2DB8AB":"#EF4444"}}>
+                    {st.pct>=target?`Safe — skip up to ${canSkip(st.attended,st.total,target)} more`:`Need ${needMore(st.attended,st.total,target)} more`}
+                  </div>
+                </div>
+                <span style={{color:"#D1D5DB",fontSize:14}}>{isExp?"▲":"▼"}</span>
+              </div>
+            </div>
+            {isExp&&(
+              <div style={{borderTop:"1px solid #F5F5F5",padding:"10px 14px 13px"}}>
+                {subLecs.length===0&&<div style={{color:"#9CA3AF",fontSize:13}}>No marked records yet</div>}
+                {subLecs.map(l=>{
+                  const sm=STATUS[att[l.id]];
+                  return (
+                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0",borderBottom:"1px solid #F9FAFB",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
+                      <span style={{fontSize:15}}>{sm.icon}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
+                        <div style={{fontSize:11,color:"#9CA3AF"}}>{isoToDisplay(l.date)} · <span style={{color:sm.fg}}>{sm.label}</span></div>
+                      </div>
+                      <span style={{fontSize:11,color:"#9CA3AF"}}>Edit ›</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUBJECTS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function SubTab({ subjects, setSubjects, lectures, setLectures, subStats, target, deleteSub, setAddSubOpen, setAddLecOpen, att, setLecOpen }) {
+  return (
+    <div className="slide">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:18,marginBottom:13}}>
+        <div style={{fontWeight:800,fontSize:15}}>Departments & Lectures</div>
+        <div style={{display:"flex",gap:7}}>
+          <button className="btn" onClick={()=>setAddLecOpen(true)} style={{padding:"7px 11px",background:"#4ECDC420",color:"#2DB8AB",fontSize:12}}>+ Lecture</button>
+          <button className="btn" onClick={()=>setAddSubOpen(true)} style={{padding:"7px 11px",background:"#6C63FF",color:"#fff",fontSize:12}}>+ Dept</button>
+        </div>
+      </div>
+
+      {subjects.length===0&&(
+        <div className="card" style={{padding:30,textAlign:"center",color:"#9CA3AF"}}>
+          <div style={{fontSize:30,marginBottom:7}}>📚</div>
+          <div style={{fontWeight:700,marginBottom:5}}>No departments yet</div>
+          <div style={{fontSize:13}}>Import your timetable to get started</div>
+        </div>
+      )}
+
+      {subjects.map(sub=>{
+        const st=subStats(sub.id);
+        const subLecs=lectures.filter(l=>l.subjectId===sub.id&&l.date).sort((a,b)=>a.date.localeCompare(b.date));
+
+        return (
+          <div key={sub.id} className="card" style={{marginBottom:11,overflow:"hidden"}}>
+            <div style={{padding:"13px 14px",borderLeft:`4px solid ${sub.color}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:800,fontSize:15,color:sub.color}}>{sub.name}</div>
+                  <div style={{fontSize:12,color:"#9CA3AF",marginTop:2}}>{subLecs.length} lectures · {st.attended}/{st.total} attended · {st.pct}%</div>
+                </div>
+                <button className="btn" onClick={()=>deleteSub(sub.id)} style={{padding:"4px 10px",background:"#FFE8E8",color:"#EF4444",fontSize:12,flexShrink:0,marginLeft:8}}>Delete</button>
+              </div>
+            </div>
+            {subLecs.length>0&&(
+              <div style={{padding:"8px 14px 12px",borderTop:"1px solid #F9FAFB"}}>
+                {subLecs.map(l=>{
+                  const sm=att[l.id]?STATUS[att[l.id]]:null;
+                  return (
+                    <div key={l.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #FAFAFA",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
+                      <span style={{fontSize:14}}>{sm?sm.icon:"⬜"}</span>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
+                        <div style={{fontSize:11,color:"#9CA3AF"}}>{isoToDisplay(l.date)}{l.start?` · ${fmt12(l.start)}`:""}</div>
+                      </div>
+                      {l.gitNum&&<span style={{fontSize:10,color:"#9CA3AF",flexShrink:0}}>#{l.gitNum}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUNK TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function BunkTab({ subjects, subStats, target, needMore, canSkip }) {
+  const [n, setN] = useState(1);
+  return (
+    <div className="slide">
+      <div style={{fontWeight:800,fontSize:15,marginTop:18,marginBottom:4}}>Bunk Calculator 🧮</div>
+      <div style={{fontSize:13,color:"#9CA3AF",marginBottom:13}}>How many lectures can you safely skip?</div>
+
+      <div className="card" style={{padding:14,marginBottom:13,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{fontSize:14,fontWeight:600}}>Skip how many?</div>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:"auto"}}>
+          <button className="btn" onClick={()=>setN(x=>Math.max(1,x-1))} style={{padding:"5px 14px",background:"#F3F4F6",color:"#374151",fontSize:18}}>−</button>
+          <span style={{fontWeight:800,fontSize:22,width:30,textAlign:"center"}}>{n}</span>
+          <button className="btn" onClick={()=>setN(x=>x+1)} style={{padding:"5px 14px",background:"#F3F4F6",color:"#374151",fontSize:18}}>+</button>
+        </div>
+      </div>
+
+      {subjects.length===0&&<div className="card" style={{padding:30,textAlign:"center",color:"#9CA3AF"}}>No data yet</div>}
+
+      {subjects.map(sub=>{
+        const st=subStats(sub.id);
+        const afterMiss=pct(st.attended,st.total+n);
+        const afterAtt=pct(st.attended+n,st.total+n);
+        const skip=canSkip(st.attended,st.total,target);
+        const safe=skip>=n;
+
+        return (
+          <div key={sub.id} className="card" style={{marginBottom:11,padding:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:11}}>
+              <div style={{width:9,height:9,borderRadius:2,background:sub.color}}/>
+              <div style={{fontWeight:700,fontSize:14}}>{sub.name}</div>
+              <span className="chip" style={{background:sub.color+"20",color:sub.color,marginLeft:"auto"}}>{st.pct}% now</span>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
+              <div style={{padding:"11px 9px",background:"#FFE8E8",borderRadius:11,textAlign:"center"}}>
+                <div style={{fontSize:11,color:"#EF4444",fontWeight:700,marginBottom:3}}>IF YOU SKIP {n}</div>
+                <div style={{fontSize:22,fontWeight:800,color:afterMiss>=target?"#1F2937":"#EF4444"}}>{afterMiss}%</div>
+                <div style={{fontSize:10,color:"#9CA3AF"}}>↓{st.pct-afterMiss}%</div>
+              </div>
+              <div style={{padding:"11px 9px",background:"#E6FAF8",borderRadius:11,textAlign:"center"}}>
+                <div style={{fontSize:11,color:"#2DB8AB",fontWeight:700,marginBottom:3}}>IF YOU ATTEND {n}</div>
+                <div style={{fontSize:22,fontWeight:800,color:"#1F2937"}}>{afterAtt}%</div>
+                <div style={{fontSize:10,color:"#9CA3AF"}}>↑{afterAtt-st.pct}%</div>
+              </div>
+            </div>
+
+            <div style={{padding:"8px 11px",borderRadius:9,fontSize:12,fontWeight:600,background:safe?"#F0FDF4":"#FFF5F5",color:safe?"#16A34A":"#DC2626"}}>
+              {safe?`✅ Safe — ${skip-n} skips still remaining after this`
+               :skip>0?`⚠️ Risky — only ${skip} total skips left`
+               :`❌ Cannot skip — at or below ${target}% target`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD DEPT SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+function AddSubSheet({ onSave, onClose }) {
+  const [form,setForm]=useState({name:"",color:"#6C63FF"});
+  const COLORS=["#6C63FF","#FF6B6B","#4ECDC4","#FF8B5E","#E84393","#9B59B6","#2EC4B6"];
+  return (
+    <div>
+      <div style={{fontWeight:800,fontSize:17,marginBottom:16}}>Add Department</div>
+      <label>Name *</label>
+      <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Medicine"/>
+      <label>Color</label>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+        {COLORS.map(c=>(
+          <div key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:28,height:28,borderRadius:8,background:c,cursor:"pointer",border:form.color===c?"3px solid #1F2937":"3px solid transparent"}}/>
+        ))}
+      </div>
+      <button className="btn" onClick={()=>{ if(!form.name) return; onSave(form); }} style={{width:"100%",padding:13,background:"#6C63FF",color:"#fff",fontSize:14,marginTop:18}}>Add Department</button>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:12,background:"#F3F4F6",color:"#6B7280",fontSize:13,marginTop:7}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADD LECTURE SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+function AddLecSheet({ subjects, onSave, onClose }) {
+  const [form,setForm]=useState({subjectId:"",topic:"",date:today(),start:"08:00",end:"08:45"});
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  return (
+    <div>
+      <div style={{fontWeight:800,fontSize:17,marginBottom:16}}>Add Lecture</div>
+      <label>Department *</label>
+      <select value={form.subjectId} onChange={e=>set("subjectId",Number(e.target.value))}>
+        <option value="">Select…</option>
+        {subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+      <label>Topic / Subject *</label>
+      <input value={form.topic} onChange={e=>set("topic",e.target.value)} placeholder="e.g. Acute Gastritis"/>
+      <label>Date *</label>
+      <input type="date" value={form.date} onChange={e=>set("date",e.target.value)}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+        <div><label>Start</label><input type="time" value={form.start} onChange={e=>set("start",e.target.value)}/></div>
+        <div><label>End</label><input type="time" value={form.end} onChange={e=>set("end",e.target.value)}/></div>
+      </div>
+      <button className="btn" onClick={()=>{ if(!form.subjectId||!form.topic||!form.date) return; onSave(form); }} style={{width:"100%",padding:13,background:"#6C63FF",color:"#fff",fontSize:14,marginTop:18}}>Add Lecture</button>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:12,background:"#F3F4F6",color:"#6B7280",fontSize:13,marginTop:7}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMPORT SHEET
+// ─────────────────────────────────────────────────────────────────────────────
+function ImportSheet({ onImport, onClose }) {
+  const [mode,setMode]=useState("file");
+  const [text,setText]=useState("");
+
+  return (
+    <div>
+      <div style={{fontWeight:800,fontSize:17,marginBottom:5}}>Import Timetable</div>
+      <div style={{color:"#6B7280",fontSize:13,marginBottom:14,lineHeight:1.5}}>
+        Upload your CSV/TSV. Columns needed: <strong>Subject</strong> (lecture topic), <strong>Day</strong> (date), <strong>Start Time</strong>, <strong>End Time</strong>, <strong>Teacher</strong> (e.g. Surg43/GIT25 — used to auto-detect department).
+      </div>
+      <div style={{display:"flex",gap:7,marginBottom:14}}>
+        {["file","paste"].map(m=>(
+          <button key={m} className="btn" onClick={()=>setMode(m)} style={{flex:1,padding:"8px 0",background:mode===m?"#6C63FF":"#F3F4F6",color:mode===m?"#fff":"#6B7280",fontSize:13}}>
+            {m==="file"?"📁 Upload File":"✏️ Paste Text"}
+          </button>
+        ))}
+      </div>
+
+      {/* Example format */}
+      <div style={{background:"#F9FAFB",borderRadius:11,padding:"10px 12px",fontFamily:"monospace",fontSize:10,color:"#374151",marginBottom:14,lineHeight:1.8,overflowX:"auto"}}>
+        Subject,Day,Start Time,End Time,Teacher,Room<br/>
+        Acute Gastritis,2026-04-28,08:45,09:30,Med50/GIT04,N/A<br/>
+        CA Esophagus,2026-05-04,08:00,08:45,Surg34/GIT09,N/A
+      </div>
+
+      {mode==="file"?(
+        <label style={{display:"block",padding:22,border:"2px dashed #D1D5DB",borderRadius:14,textAlign:"center",cursor:"pointer",color:"#6B7280",fontSize:13}}>
+          <div style={{fontSize:28,marginBottom:6}}>📂</div>Click to upload CSV / TSV
+          <input type="file" accept=".csv,.tsv,.txt" style={{display:"none"}} onChange={e=>{
+            const f=e.target.files[0];
+            if(!f) return;
+            const r=new FileReader();
+            r.onload=ev=>onImport(ev.target.result);
+            r.readAsText(f);
+          }}/>
+        </label>
+      ):(
+        <>
+          <textarea rows={5} value={text} onChange={e=>setText(e.target.value)} placeholder="Paste CSV/TSV here…" style={{fontFamily:"monospace",fontSize:12}}/>
+          <button className="btn" onClick={()=>onImport(text)} style={{width:"100%",padding:13,background:"#6C63FF",color:"#fff",fontSize:14,marginTop:9}}>Import</button>
+        </>
+      )}
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:12,background:"#F3F4F6",color:"#6B7280",fontSize:13,marginTop:8}}>Cancel</button>
+    </div>
+  );
+}
