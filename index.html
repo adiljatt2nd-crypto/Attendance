@@ -1,662 +1,325 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, shrink-to-fit=no">
-  <title>LectureTrack V6</title>
-  
-  <!-- PWA iOS Meta Tags -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="LectureTrack">
-  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3652/3652191.png">
-  <meta name="theme-color" content="#1E1B4B">
+import { useState, useCallback } from "react";
 
-  <!-- Load React, ReactDOM, and Babel from CDN -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+// ─── CLEAN SPAN ARTIFACTS ────────────────────────────────────────────────────
+function clean(s) {
+  if (!s) return "";
+  return s.replace(/\[span_\d+\]\((start|end)_span\)/gi,"")
+          .replace(/\[span_\d+\]/gi,"")
+          .replace(/\(start_span\)|\(end_span\)/gi,"")
+          .replace(/\s{2,}/g," ").trim();
+}
 
-  <!-- Inline Dynamic PWA Manifest Deployment -->
-  <script>
-    const manifest = {
-      name: "LectureTrack V6 App",
-      short_name: "LectureTrack",
-      start_url: "./index.html",
-      display: "standalone",
-      background_color: "#1E1B4B",
-      theme_color: "#6C63FF",
-      orientation: "portrait",
-      icons: [{
-        src: "https://cdn-icons-png.flaticon.com/512/3652/3652191.png",
-        sizes: "512x512",
-        type: "image/png",
-        purpose: "any"
-      }]
-    };
-    const link = document.createElement('link');
-    link.rel = 'manifest';
-    link.href = 'data:application/json;base64,' + btoa(JSON.stringify(manifest));
-    document.head.appendChild(link);
+// ─── DEPARTMENT DETECTION ────────────────────────────────────────────────────
+const DEPTS = [
+  { test: c=>/psy/i.test(c),                               name:"Psychiatry",     color:"#9B59B6" },
+  { test: c=>/obs|gyn/i.test(c),                           name:"Obs & Gynae",    color:"#E84393" },
+  { test: c=>/peds|pediatric/i.test(c)&&/surg/i.test(c),  name:"Paeds Surgery",  color:"#F3722C" },
+  { test: c=>/peds|pediatric/i.test(c),                    name:"Paeds Medicine", color:"#FF8B5E" },
+  { test: c=>/surg/i.test(c),                              name:"Surgery",        color:"#FF6B6B" },
+  { test: c=>/med|\/ge\b/i.test(c),                        name:"Medicine",       color:"#4ECDC4" },
+];
+function detectDept(raw) {
+  const c = clean(raw||"");
+  if (!c||c==="N/A") return {name:"General",color:"#6C63FF"};
+  for (const d of DEPTS) if (d.test(c)) return {name:d.name,color:d.color};
+  return {name:"General",color:"#6C63FF"};
+}
+function parseGITNum(raw) {
+  const m = clean(raw||"").match(/GIT0*(\d+)/i);
+  return m ? parseInt(m[1]) : null;
+}
 
-    if ('serviceWorker' in navigator) {
-      const sw = `self.addEventListener('fetch', function(e) {});`;
-      const blob = new Blob([sw], { type: 'application/javascript' });
-      navigator.serviceWorker.register(URL.createObjectURL(blob));
-    }
-  </script>
-</head>
-<body style="margin: 0; padding: 0; background-color: #F0F2F8; -webkit-tap-highlight-color: transparent;">
-  
-  <div id="root"></div>
+// ─── TIME / DATE ─────────────────────────────────────────────────────────────
+function xlFrac(raw) {
+  if (!raw||raw==="N/A") return null;
+  const s=String(raw).trim();
+  if (/^\d{1,2}:\d{2}$/.test(s)) return s.length===4?"0"+s:s;
+  const n=parseFloat(s);
+  if (!isNaN(n)&&n>0&&n<1){const m=Math.round(n*24*60);return `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;}
+  return null;
+}
+function fmt12(t){if(!t)return"—";const[h,m]=t.split(":").map(Number);return`${h>12?h-12:h||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;}
+function t2m(t){if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m;}
+function xlSerial(n){const d=new Date(1899,11,30);d.setDate(d.getDate()+Math.round(Number(n)));return d.toISOString().slice(0,10);}
+function parseDate(raw){
+  if(!raw)return null;const s=String(raw).trim();
+  if(/^\d+$/.test(s)&&Number(s)>40000)return xlSerial(Number(s));
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  const m=s.match(/(\d{2})[-\/](\d{2})[-\/](\d{4})/);if(m)return`${m[3]}-${m[2]}-${m[1]}`;
+  const f=parseFloat(s);if(!isNaN(f)&&f>40000)return xlSerial(f);
+  return null;
+}
+function todayISO(){return new Date().toISOString().slice(0,10);}
+function dispDate(iso){if(!iso)return"";const[y,m,d]=iso.split("-");return`${d}/${m}/${y}`;}
+function pct(a,t){return t===0?0:Math.round(a/t*100);}
+function needMore(a,t,tgt){if(pct(a,t)>=tgt)return 0;const r=tgt/100;return Math.ceil((r*t-a)/(1-r));}
+function canSkip(a,t,tgt){return Math.max(0,Math.floor(a/(tgt/100)-t));}
 
-  <script type="text/babel">
-    const { useState, useCallback, useMemo } = React;
+// ─── CSV PARSER ───────────────────────────────────────────────────────────────
+function parseFile(raw){
+  const cleaned=raw.replace(/\[span_\d+\]\((start|end)_span\)/gi,"").replace(/\[span_\d+\]/gi,"");
+  const lines=cleaned.split(/\r?\n/).filter(Boolean);
+  if(lines.length<2)return[];
+  const sep=lines[0].split("\t").length>=lines[0].split(",").length?"\t":",";
+  const strip=s=>s.trim().replace(/^["']|["']$/g,"");
+  const hdrs=lines[0].split(sep).map(strip).map(h=>h.toLowerCase());
+  const fc=(...ks)=>hdrs.findIndex(h=>ks.some(k=>h.includes(k)));
+  const iS=fc("subject","lecture","topic","name"),iD=fc("day","date"),
+        iSt=fc("start","from","begin"),iE=fc("end","to","finish"),iC=fc("teacher","faculty","code","instructor");
+  const rows=[];
+  lines.slice(1).forEach(line=>{
+    const cells=line.split(sep).map(strip);
+    const topic=clean(iS>=0?cells[iS]||"":cells[0]||"");
+    if(!topic)return;
+    // Skip truly non-attendance rows; keep class assessments
+    if(/^(holiday|tentative|eid|break|end of|clinical|week\s|day\s*\d)/i.test(topic))return;
+    const dayRaw=iD>=0?cells[iD]||"":"",startRaw=iSt>=0?cells[iSt]||"":"",
+          endRaw=iE>=0?cells[iE]||"":"",codeRaw=clean(iC>=0?cells[iC]||"":"");
+    // For "Class Assessment" rows the topic IS the dept name (e.g. "Peds Surgery")
+    // The code column holds the dept identifier; if blank, try to detect from topic itself
+    const isAssessment=/class\s*assessment/i.test(topic);
+    // If it's an assessment, the actual dept name may appear after the colon or be in the code
+    // e.g. "Class Assessment" with code "Peds Surgery" or topic "Class Assessment — Peds Surgery"
+    const assessLabel=isAssessment
+      ? (codeRaw&&codeRaw.length>0&&!/^N\/A$/i.test(codeRaw)?codeRaw:topic)
+      : topic;
+    const finalTopic=isAssessment?`📝 Class Assessment${codeRaw&&!/^N\/A$/i.test(codeRaw)?" — "+codeRaw:""}`  :topic;
+    // dept: for assessments try to detect from codeRaw first, then from assessLabel
+    const dept=detectDept(codeRaw)||detectDept(assessLabel)||{name:"General",color:"#6C63FF"};
+    rows.push({topic:finalTopic,dept,gitNum:parseGITNum(codeRaw),code:codeRaw,
+               date:parseDate(dayRaw),start:xlFrac(startRaw),end:xlFrac(endRaw),isAssessment});
+  });
+  return rows;
+}
+function buildFromRows(rows,existingSubs=[]){
+  const map={};existingSubs.forEach(s=>{map[s.name]=s;});
+  let nsi=existingSubs.length?Math.max(...existingSubs.map(s=>s.id))+1:1,nli=Date.now();
+  const subjects=[...existingSubs],lectures=[];
+  rows.forEach(r=>{
+    const {name:dn,color:dc}=r.dept;
+    if(!map[dn]){const s={id:nsi++,name:dn,color:dc};map[dn]=s;subjects.push(s);}
+    lectures.push({id:nli++,subjectId:map[dn].id,topic:r.topic,gitNum:r.gitNum,
+                   code:r.code,date:r.date,start:r.start,end:r.end,isAssessment:!!r.isAssessment});
+  });
+  return{subjects,lectures};
+}
 
-    // ─── HELPERS & PARSERS ───────────────────────────────────────────────────────
-    function clean(s) {
-      if (!s) return "";
-      return s.replace(/\[span_\d+\]\((start|end)_span\)/gi, "").replace(/\[span_\d+\]/gi, "").replace(/\(start_span\)|\(end_span\)/gi, "").replace(/\s{2,}/g, " ").trim();
-    }
+// ─── RING ─────────────────────────────────────────────────────────────────────
+function Ring({value,target,size=80,stroke=8,color="#6C63FF"}){
+  const r=(size-stroke)/2,circ=2*Math.PI*r,dash=Math.min(Math.max(value,0),100)/100*circ;
+  return(<svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#EFEFEF" strokeWidth={stroke}/>
+    <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={value>=target?color:"#EF4444"}
+      strokeWidth={stroke} strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+      style={{transition:"stroke-dasharray .6s ease"}}/>
+  </svg>);
+}
 
-    function makeId(date, topic, type, shift = "") {
-      const str = `${type}_${shift}_${date}_${clean(topic).replace(/\s+/g, "").toLowerCase().slice(0, 15)}`;
-      let hash = 0;
-      for (let i = 0; i < str.length; i++) { hash = (hash << 5) - hash + str.charCodeAt(i); hash |= 0; }
-      return `evt_${Math.abs(hash)}`;
-    }
+// ─── STATUS ───────────────────────────────────────────────────────────────────
+const STATUS={
+  attended: {icon:"✅",label:"Attended", bg:"#E6FAF8",fg:"#2DB8AB",fill:"#22C55E"},
+  missed:   {icon:"❌",label:"Missed",   bg:"#FFE8E8",fg:"#EF4444",fill:"#EF4444"},
+  cancelled:{icon:"🚫",label:"Cancelled",bg:"#F3F4F6",fg:"#6B7280",fill:"#374151"},
+  holiday:  {icon:"🏖️",label:"Holiday",  bg:"#FFFBEB",fg:"#D97706",fill:"#F59E0B"},
+};
 
-    const DEPTS = [
-      { test: c => /psy/i.test(c), name: "Psychiatry", color: "#9B59B6" },
-      { test: c => /obs|gyn/i.test(c), name: "Obs & Gynae", color: "#E84393" },
-      { test: c => /peds|pediatric/i.test(c) && /surg/i.test(c), name: "Paeds Surgery", color: "#F3722C" },
-      { test: c => /peds|pediatric/i.test(c), name: "Paeds Medicine", color: "#FF8B5E" },
-      { test: c => /surg/i.test(c), name: "Surgery", color: "#FF6B6B" },
-      { test: c => /med|\/ge\b/i.test(c), name: "Medicine", color: "#4ECDC4" },
-    ];
+// ─── ROOT ─────────────────────────────────────────────────────────────────────
+export default function App(){
+  const[subjects,setSubjects]=useState([]);
+  const[lectures,setLectures]=useState([]);
+  const[att,setAtt]=useState({});
+  const[target,setTarget]=useState(75);
+  const[tab,setTab]=useState("calendar");
+  const now=new Date();
+  const[calYear,setCalYear]=useState(now.getFullYear());
+  const[calMonth,setCalMonth]=useState(now.getMonth());
+  const[dayOpen,setDayOpen]=useState(null);
+  const[lecOpen,setLecOpen]=useState(null);
+  const[importOpen,setImportOpen]=useState(false);
+  const[addSubOpen,setAddSubOpen]=useState(false);
+  const[addLecOpen,setAddLecOpen]=useState(false);
+  const[toast,setToast]=useState(null);
 
-    function detectDept(raw) {
-      const c = clean(raw || "");
-      for (const d of DEPTS) if (d.test(c)) return { name: d.name, color: d.color };
-      return { name: "General", color: "#6C63FF" };
-    }
+  const showToast=(msg,err=false)=>{setToast({msg,err});setTimeout(()=>setToast(null),2800);};
+  const mark=(id,status)=>{setAtt(p=>({...p,[id]:status}));setLecOpen(null);showToast(`Marked as ${status}`);};
+  const clearMark=(id)=>{setAtt(p=>{const n={...p};delete n[id];return n;});setLecOpen(null);showToast("Cleared");};
 
-    function xlFrac(raw) {
-      if (!raw || raw === "N/A") return null;
-      const s = String(raw).trim();
-      if (/^\d{1,2}:\d{2}$/.test(s)) return s.length === 4 ? "0" + s : s;
-      const n = parseFloat(s);
-      if (!isNaN(n) && n > 0 && n < 1) { const m = Math.round(n * 24 * 60); return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; }
-      return null;
-    }
-    function fmt12(t) { if (!t) return "—"; const [h, m] = t.split(":").map(Number); return `${h > 12 ? h - 12 : h || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`; }
-    function t2m(t) { if (!t) return 0; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
-    function xlSerial(n) { const d = new Date(1899, 11, 30); d.setDate(d.getDate() + Math.round(Number(n))); return d.toISOString().slice(0, 10); }
+  const lecsOnDate=useCallback((iso)=>
+    lectures.filter(l=>l.date===iso).sort((a,b)=>t2m(a.start)-t2m(b.start)),[lectures]);
 
-    function parseDate(raw) {
-      if (!raw) return null; const s = String(raw).trim();
-      if (/^\d+$/.test(s) && Number(s) > 40000) return xlSerial(Number(s));
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      let m = s.match(/(\d{2})[-\/](\d{2})[-\/](\d{4})/); if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-      m = s.match(/(\d{2})\.(\d{2})\.(\d{4})/); if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-      return null;
-    }
+  const subStats=useCallback((sid)=>{
+    const ls=lectures.filter(l=>l.subjectId===sid&&l.date);
+    const cnt=ls.filter(l=>att[l.id]!=="cancelled"&&att[l.id]!=="holiday");
+    const atd=cnt.filter(l=>att[l.id]==="attended").length;
+    return{total:cnt.length,attended:atd,pct:pct(atd,cnt.length)};
+  },[lectures,att]);
 
-    function addDays(iso, days) {
-      const d = new Date(iso);
-      d.setDate(d.getDate() + days);
-      return d.toISOString().slice(0, 10);
-    }
-    function todayISO() { return new Date().toISOString().slice(0, 10); }
-    function dispDate(iso) { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; }
+  const overall=useCallback(()=>{
+    let tot=0,atd=0;subjects.forEach(s=>{const st=subStats(s.id);tot+=st.total;atd+=st.attended;});
+    return{total:tot,attended:atd,pct:pct(atd,tot)};
+  },[subjects,subStats]);
 
-    // ─── CSV PARSER ───────────────────────────────────────────────────────────────
-    function parseCSV(raw, type, moduleName = "General") {
-      const cleaned = raw.replace(/\[span_\d+\]\((start|end)_span\)/gi, "").replace(/\[span_\d+\]/gi, "");
-      const lines = cleaned.split(/\r?\n/).filter(Boolean);
-      if (lines.length < 2) return [];
-      const sep = lines[0].split("\t").length >= lines[0].split(",").length ? "\t" : ",";
-      const strip = s => s.trim().replace(/^["']|["']$/g, "");
-      const hdrs = lines[0].split(sep).map(strip).map(h => h.toLowerCase());
-      const rows = [];
+  const doImport=(raw)=>{
+    const rows=parseFile(raw);
+    if(!rows.length){showToast("No lectures found",true);return;}
+    const wd=rows.filter(r=>r.date).length;
+    const{subjects:ns,lectures:nl}=buildFromRows(rows,subjects);
+    setSubjects(ns);
+    setLectures(prev=>{
+      const ex=new Set(prev.map(l=>`${l.topic}|${l.date}`));
+      return[...prev,...nl.filter(l=>!ex.has(`${l.topic}|${l.date}`))];
+    });
+    setImportOpen(false);
+    showToast(`Imported ${nl.length} lectures (${wd} with dates)`);
+  };
 
-      if (type === 'wards') {
-        const iD = hdrs.findIndex(h => h.includes("date"));
-        const iMT = hdrs.findIndex(h => h.includes("morning class"));
-        const iMTeach = hdrs.findIndex(h => h.includes("morning teacher"));
-        const iET = hdrs.findIndex(h => h.includes("evening class"));
-        const iSR = hdrs.findIndex(h => h.includes("registrar") || h.includes("sr"));
+  const deleteSub=(sid)=>{
+    if(!confirm("Delete this department and all its lectures?"))return;
+    const ids=new Set(lectures.filter(l=>l.subjectId===sid).map(l=>l.id));
+    setSubjects(p=>p.filter(s=>s.id!==sid));
+    setLectures(p=>p.filter(l=>l.subjectId!==sid));
+    setAtt(p=>{const n={...p};ids.forEach(id=>delete n[id]);return n;});
+    showToast("Deleted");
+  };
 
-        lines.slice(1).forEach(line => {
-          const cells = line.split(sep).map(strip);
-          const date = parseDate(cells[iD]);
-          if (!date) return;
+  const printReport=()=>{
+    const ov=overall();
+    const dr=subjects.map(s=>{const st=subStats(s.id);
+      return`<tr><td style="border-left:4px solid ${s.color};padding-left:10px;font-weight:600">${s.name}</td>
+      <td>${st.attended}</td><td>${st.total}</td>
+      <td style="font-weight:700;color:${st.pct>=target?"#2DB8AB":"#EF4444"}">${st.pct}%</td>
+      <td>${st.pct>=target?`✅ Can skip ${canSkip(st.attended,st.total,target)}`:`⚠️ Need ${needMore(st.attended,st.total,target)} more`}</td></tr>`;
+    }).join("");
+    const lr=lectures.filter(l=>l.date&&att[l.id]).sort((a,b)=>a.date.localeCompare(b.date)).map(l=>{
+      const s=subjects.find(x=>x.id===l.subjectId),sm=STATUS[att[l.id]];
+      return`<tr><td>${dispDate(l.date)}</td><td>${s?.name||""}</td><td>${l.topic}</td><td style="color:${sm.fg}">${sm.icon} ${sm.label}</td></tr>`;
+    }).join("");
+    const win=window.open("","_blank");
+    win.document.write(`<!DOCTYPE html><html><head><title>Report</title>
+    <style>body{font-family:sans-serif;padding:28px;max-width:900px;margin:0 auto}h1{color:#6C63FF}
+    .row{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}.stat{background:#f0efff;border-radius:10px;padding:14px 20px;text-align:center;min-width:90px}
+    .stat .v{font-size:26px;font-weight:800;color:#6C63FF}.stat .l{font-size:11px;color:#666;margin-top:2px}
+    h2{font-size:15px;color:#374151;margin:24px 0 8px}table{width:100%;border-collapse:collapse;font-size:13px}
+    th{background:#6C63FF;color:#fff;padding:9px 12px;text-align:left}td{padding:8px 12px;border-bottom:1px solid #eee}
+    tr:nth-child(even){background:#fafafa}@media print{.np{display:none}}</style></head><body>
+    <h1>📊 LectureTrack — Attendance Report</h1>
+    <p style="color:#666">Generated: ${new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})} · Target: ${target}%</p>
+    <div class="row">
+      <div class="stat"><div class="v">${ov.pct}%</div><div class="l">Overall</div></div>
+      <div class="stat"><div class="v">${ov.attended}</div><div class="l">Attended</div></div>
+      <div class="stat"><div class="v">${ov.total}</div><div class="l">Total</div></div>
+      <div class="stat"><div class="v">${canSkip(ov.attended,ov.total,target)}</div><div class="l">Can Skip</div></div>
+    </div>
+    <h2>Department Summary</h2>
+    <table><thead><tr><th>Department</th><th>Attended</th><th>Total</th><th>%</th><th>Status</th></tr></thead><tbody>${dr}</tbody></table>
+    ${lr?`<h2>Lecture Log</h2><table><thead><tr><th>Date</th><th>Dept</th><th>Topic</th><th>Status</th></tr></thead><tbody>${lr}</tbody></table>`:""}
+    <br><button class="np" onclick="window.print()" style="padding:12px 24px;background:#6C63FF;color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer">🖨️ Print / Save PDF</button>
+    </body></html>`);win.document.close();
+  };
 
-          const mTopic = clean(iMT >= 0 ? cells[iMT] : "");
-          const eTopic = clean(iET >= 0 ? cells[iET] : "");
+  const ov=overall();
+  return(
+    <div style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#F0F2F8",minHeight:"100vh",maxWidth:480,margin:"0 auto",paddingBottom:86}}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
+        *{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{display:none}
+        .card{background:#fff;border-radius:18px;box-shadow:0 1px 8px #00000010}
+        .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;border-radius:12px;transition:transform .12s;outline:none}
+        .btn:active{transform:scale(.95)}
+        input,select,textarea{font-family:inherit;border:1.5px solid #E5E7EB;border-radius:11px;padding:10px 13px;font-size:14px;outline:none;width:100%;background:#fff;transition:border .2s}
+        input:focus,select:focus,textarea:focus{border-color:#6C63FF}
+        label{font-size:12px;font-weight:600;color:#6B7280;display:block;margin:12px 0 4px}
+        .overlay{position:fixed;inset:0;background:#00000055;z-index:60;display:flex;align-items:flex-end;justify-content:center}
+        .sheet{background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:92vh;overflow-y:auto;padding:24px}
+        .slide{animation:su .22s ease}
+        @keyframes su{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        .chip{display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+        .pulse{animation:pl 1.8s infinite}@keyframes pl{0%,100%{opacity:1}50%{opacity:.4}}
+      `}</style>
 
-          if (mTopic && !/^(opd\+er|opd|er)$/i.test(mTopic)) {
-            rows.push({
-              id: makeId(date, mTopic, 'ward', 'morning'), type: 'ward', date, shift: 'Morning',
-              topic: mTopic, teacher: iMTeach >= 0 ? cells[iMTeach] : "", module: 'Wards', dept: { name: "Clinical Ward", color: "#0EA5E9" }
-            });
-          }
-          if (eTopic && !/^(opd\+er|opd|er)$/i.test(eTopic)) {
-            rows.push({
-              id: makeId(date, eTopic, 'ward', 'evening'), type: 'ward', date, shift: 'Evening',
-              topic: eTopic, teacher: iSR >= 0 ? cells[iSR] : "", module: 'Wards', dept: { name: "Evening ER/Ward", color: "#3B82F6" }
-            });
-          }
-        });
-      } else {
-        const fc = (...ks) => hdrs.findIndex(h => ks.some(k => h.includes(k)));
-        const iS = fc("subject", "lecture", "topic", "name"), iD = fc("day", "date");
-        const iSt = fc("start", "from", "begin"), iE = fc("end", "to", "finish"), iC = fc("teacher", "faculty", "code");
-
-        lines.slice(1).forEach(line => {
-          const cells = line.split(sep).map(strip);
-          const topic = clean(iS >= 0 ? cells[iS] : cells[0] || "");
-          if (!topic || /^(holiday|tentative|eid|break|end of|clinical|week\s|day\s*\d)/i.test(topic)) return;
-          const date = parseDate(iD >= 0 ? cells[iD] : "");
-          const start = xlFrac(iSt >= 0 ? cells[iSt] : "");
-          const isAssessment = /class\s*assessment/i.test(topic);
-          const dept = detectDept(topic);
-
-          rows.push({
-            id: makeId(date || 'nodate', topic, 'lecture', start || 'nostart'),
-            type: 'lecture', date, start, end: xlFrac(iE >= 0 ? cells[iE] : ""),
-            topic: isAssessment ? `📝 Assessment — ${topic}` : topic,
-            teacher: iC >= 0 ? cells[iC] : "", isAssessment, module: moduleName, dept
-          });
-        });
-      }
-      return rows;
-    }
-
-    // ─── MATH & STATS LOGIC ───────────────────────────────────────────────────────
-    function calculateStats(events, att, target) {
-      const scheduled = events.length;
-      const markedEvents = events.filter(e => att[e.id] && att[e.id] !== 'cancelled' && att[e.id] !== 'holiday');
-      const attended = markedEvents.filter(e => att[e.id] === 'attended').length;
-      const missed = markedEvents.filter(e => att[e.id] === 'missed').length;
-      const totalMarked = attended + missed;
-
-      const currentPct = totalMarked === 0 ? 0 : Math.round((attended / totalMarked) * 100);
-      const requiredTotal = Math.ceil(scheduled * (target / 100));
-      const needMore = Math.max(0, requiredTotal - attended);
-      const skipsAllowedTotal = Math.floor(scheduled * (1 - target / 100));
-      const skipsLeft = Math.max(0, skipsAllowedTotal - missed);
-      const unmarkedRemaining = scheduled - totalMarked;
-      const isImpossible = needMore > unmarkedRemaining;
-
-      return { scheduled, attended, missed, totalMarked, currentPct, requiredTotal, needMore, skipsLeft, unmarkedRemaining, isImpossible };
-    }
-
-    const STATUS = {
-      attended: { icon: "✅", label: "Attended", bg: "#E6FAF8", fg: "#2DB8AB", fill: "#22C55E" },
-      missed: { icon: "❌", label: "Missed", bg: "#FFE8E8", fg: "#EF4444", fill: "#EF4444" },
-      cancelled: { icon: "🚫", label: "Cancelled", bg: "#F3F4F6", fg: "#6B7280", fill: "#374151" },
-      holiday: { icon: "🏖️", label: "Holiday", bg: "#FFFBEB", fg: "#D97706", fill: "#F59E0B" },
-    };
-
-    // ─── MAIN APP COMPONENT ───────────────────────────────────────────────────────
-    function App() {
-      const [events, setEvents] = useState([]);
-      const [att, setAtt] = useState({});
-      const [target, setTarget] = useState(75);
-      const [tab, setTab] = useState("calendar");
-
-      const today = todayISO();
-      const [calYear, setCalYear] = useState(new Date().getFullYear());
-      const [calMonth, setCalMonth] = useState(new Date().getMonth());
-
-      const [dayOpen, setDayOpen] = useState(null);
-      const [evtOpen, setEvtOpen] = useState(null);
-      const [editEvt, setEditEvt] = useState(null);
-      const [importOpen, setImportOpen] = useState(false);
-      const [toast, setToast] = useState(null);
-
-      const showToast = (msg, err = false) => { setToast({ msg, err }); setTimeout(() => setToast(null), 3000); };
-      const mark = (id, status) => { setAtt(p => ({ ...p, [id]: status })); setEvtOpen(null); showToast(`Marked as ${status}`); };
-      const clearMark = (id) => { setAtt(p => { const n = { ...p }; delete n[id]; return n; }); setEvtOpen(null); showToast("Cleared"); };
-
-      const handleImport = (raw, type, moduleName) => {
-        const newEvents = parseCSV(raw, type, moduleName);
-        if (!newEvents.length) { showToast("No valid rows found", true); return; }
-
-        setEvents(prev => {
-          const merged = [...prev];
-          const existingIds = new Set(prev.map(e => e.id));
-          newEvents.forEach(ne => { if (!existingIds.has(ne.id)) merged.push(ne); });
-          return merged;
-        });
-        setImportOpen(false);
-        showToast(`Imported ${newEvents.length} ${type === 'wards' ? 'ward classes' : 'lectures'}`);
-      };
-
-      const handleSaveEdit = (updatedEvt) => {
-        setEvents(prev => prev.map(e => e.id === updatedEvt.id ? updatedEvt : e));
-        setEditEvt(null);
-        setEvtOpen(updatedEvt);
-        showToast("Event updated");
-      };
-
-      return (
-        <div style={{ fontFamily: "'DM Sans','Segoe UI',sans-serif", background: "#F0F2F8", minHeight: "100vh", maxWidth: 480, margin: "0 auto", paddingBottom: 86 }}>
-          <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-            * { box-sizing: border-box; margin: 0; padding: 0; } ::-webkit-scrollbar { display: none; }
-            .card { background: #fff; border-radius: 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
-            .btn { border: none; cursor: pointer; font-family: inherit; font-weight: 600; border-radius: 12px; transition: transform 0.12s; outline: none; }
-            .btn:active { transform: scale(0.96); }
-            input, select, textarea { font-family: inherit; border: 1.5px solid #E5E7EB; border-radius: 11px; padding: 10px 13px; font-size: 14px; outline: none; width: 100%; transition: border 0.2s; background:#fff;}
-            input:focus, select:focus, textarea:focus { border-color: #6C63FF; }
-            label { font-size: 12px; font-weight: 600; color: #6B7280; display: block; margin: 12px 0 4px; }
-            .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 60; display: flex; align-items: flex-end; justify-content: center; backdrop-filter: blur(2px); }
-            .sheet { background: #fff; border-radius: 24px 24px 0 0; width: 100%; max-width: 480px; max-height: 92vh; overflow-y: auto; padding: 24px; }
-            .slide { animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
-            @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-            .chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
-          `}</style>
-
-          {/* HEADER */}
-          <div style={{ background: "linear-gradient(135deg, #1E1B4B 0%, #6C63FF 100%)", padding: "20px 18px 32px", color: "#fff" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 11, opacity: 0.8, letterSpacing: 0.5 }}>{new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</div>
-                <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: -0.5 }}>LectureTrack V6</div>
-              </div>
-              <button className="btn" onClick={() => setImportOpen(true)} style={{ padding: "8px 14px", background: "rgba(255,255,255,0.2)", color: "#fff", fontSize: 13, backdropFilter: "blur(5px)" }}>
-                + Import
-              </button>
-            </div>
+      {/* HEADER */}
+      <div style={{background:"linear-gradient(135deg,#6C63FF 0%,#4ECDC4 100%)",padding:"20px 18px 32px",color:"#fff"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <div>
+            <div style={{fontSize:11,opacity:.75,letterSpacing:.5}}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
+            <div style={{fontSize:24,fontWeight:800,letterSpacing:-.5}}>LectureTrack</div>
           </div>
-
-          {/* MAIN CONTENT */}
-          <div style={{ padding: "0 14px", marginTop: -20 }}>
-            {tab === "calendar" && <CalTab events={events} att={att} today={today} calYear={calYear} calMonth={calMonth} setCalYear={setCalYear} setCalMonth={setCalMonth} setDayOpen={setDayOpen} setEvtOpen={setEvtOpen} />}
-            {tab === "attendance" && <AttTab events={events} att={att} target={target} setTarget={setTarget} setEvtOpen={setEvtOpen} />}
-          </div>
-
-          {/* BOTTOM NAV */}
-          <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: "#fff", borderTop: "1px solid #F3F4F6", display: "flex", zIndex: 40, paddingBottom: "env(safe-area-inset-bottom)" }}>
-            {[{ id: "calendar", icon: "📅", label: "Dashboard" }, { id: "attendance", icon: "📊", label: "Attendance" }].map(t => (
-              <button key={t.id} className="btn" onClick={() => setTab(t.id)}
-                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "12px 0 10px", color: tab === t.id ? "#6C63FF" : "#9CA3AF", background: "none", borderRadius: 0, fontSize: 11, fontWeight: tab === t.id ? 800 : 600 }}>
-                <span style={{ fontSize: 22, marginBottom: 2 }}>{t.icon}</span>{t.label}
-              </button>
-            ))}
-          </div>
-
-          {/* MODALS */}
-          {dayOpen && <div className="overlay" onClick={() => setDayOpen(null)}><div className="sheet slide" onClick={e => e.stopPropagation()}>
-            <DaySheet date={dayOpen} events={events} att={att} setEvtOpen={setEvtOpen} onClose={() => setDayOpen(null)} />
-          </div></div>}
-
-          {evtOpen && <div className="overlay" onClick={() => setEvtOpen(null)}><div className="sheet slide" onClick={e => e.stopPropagation()}>
-            <EvtSheet evt={evtOpen} att={att} mark={mark} clearMark={clearMark} onEdit={() => { setEvtOpen(null); setEditEvt(evtOpen); }} onClose={() => setEvtOpen(null)} />
-          </div></div>}
-
-          {editEvt && <div className="overlay" onClick={() => setEditEvt(null)}><div className="sheet slide" onClick={e => e.stopPropagation()}>
-            <EditSheet evt={editEvt} onSave={handleSaveEdit} onClose={() => setEditEvt(null)} />
-          </div></div>}
-
-          {importOpen && <div className="overlay" onClick={() => setImportOpen(false)}><div className="sheet slide" onClick={e => e.stopPropagation()}>
-            <ImportSheet onImport={handleImport} onClose={() => setImportOpen(false)} />
-          </div></div>}
-
-          {toast && <div style={{ position: "fixed", bottom: 92, left: "50%", transform: "translateX(-50%)", background: toast.err ? "#EF4444" : "#1F2937", color: "#fff", padding: "12px 22px", borderRadius: 16, fontSize: 13, fontWeight: 600, zIndex: 200, animation: "slideUp 0.2s ease", whiteSpace: "nowrap", boxShadow: "0 8px 20px rgba(0,0,0,0.15)" }}>{toast.msg}</div>}
-        </div>
-      );
-    }
-
-    // ─── DASHBOARD / CALENDAR TAB ─────────────────────────────────────────────────
-    function CalTab({ events, att, today, calYear, calMonth, setCalYear, setCalMonth, setDayOpen, setEvtOpen }) {
-      const tomorrow = addDays(today, 1);
-      const getEvts = (iso) => events.filter(e => e.date === iso).sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'ward' ? -1 : 1;
-        return t2m(a.start) - t2m(b.start);
-      });
-
-      const todayEvts = getEvts(today);
-      const tomEvts = getEvts(tomorrow);
-
-      const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-      const firstDay = new Date(calYear, calMonth, 1).getDay();
-      const monthLabel = new Date(calYear, calMonth, 1).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-
-      const weeks = [];
-      const totalCells = firstDay + daysInMonth;
-      for (let w = 0; w < Math.ceil(totalCells / 7); w++) {
-        const week = [];
-        for (let d = 0; d < 7; d++) {
-          const day = w * 7 + d - firstDay + 1;
-          week.push(day >= 1 && day <= daysInMonth ? day : null);
-        }
-        weeks.push(week);
-      }
-
-      return (
-        <div className="slide" style={{ paddingTop: 4 }}>
-          <div style={{ display: "flex", overflowX: "auto", gap: 12, paddingBottom: 16, margin: "0 -14px", paddingLeft: 14, paddingRight: 14, scrollSnapType: "x mandatory" }}>
-            <TimelineGroup title="Today" date={today} evts={todayEvts} att={att} setEvtOpen={setEvtOpen} />
-            <TimelineGroup title="Tomorrow" date={tomorrow} evts={tomEvts} att={att} setEvtOpen={setEvtOpen} />
-          </div>
-
-          <div className="card" style={{ padding: "16px 12px", marginTop: 8 }}>
-            <div style={{ display: "flex", justifycontent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <button className="btn" onClick={() => { if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); } else setCalMonth(m => m - 1); }} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 16 }}>‹</button>
-              <div style={{ fontWeight: 800, fontSize: 16, color: "#1F2937" }}>{monthLabel}</div>
-              <button className="btn" onClick={() => { if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); } else setCalMonth(m => m + 1); }} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 16 }}>›</button>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 8 }}>
-              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#9CA3AF" }}>{d}</div>)}
-            </div>
-
-            {weeks.map((week, wi) => (
-              <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
-                {week.map((day, di) => {
-                  if (!day) return <div key={di} />;
-                  const iso = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-                  const dEvts = getEvts(iso);
-                  const isToday = iso === today;
-                  const hasEvt = dEvts.length > 0;
-                  const statuses = dEvts.map(e => att[e.id]).filter(Boolean);
-
-                  let bg = "#F9FAFB", border = "2px solid transparent", dot = null;
-                  if (hasEvt) {
-                    if (statuses.length === 0) { bg = "#EEF2FF"; dot = "#6C63FF"; }
-                    else if (statuses.every(s => s === "attended")) { bg = "#DCFCE7"; dot = "#22C55E"; }
-                    else if (statuses.every(s => s === "missed")) { bg = "#FEE2E2"; dot = "#EF4444"; }
-                    else { bg = "#FEF9C3"; dot = "#EAB308"; }
-                  }
-                  if (isToday) border = "2px solid #6C63FF";
-
-                  return (
-                    <div key={di} onClick={() => { if (hasEvt) setDayOpen(iso); }}
-                      style={{ height: 44, borderRadius: 12, background: bg, border, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: hasEvt ? "pointer" : "default", position: "relative" }}>
-                      <span style={{ fontSize: 13, fontWeight: hasEvt ? 700 : 500, color: hasEvt ? "#1F2937" : "#9CA3AF" }}>{day}</span>
-                      {dot && <div style={{ width: 4, height: 4, borderRadius: "50%", background: dot, marginTop: 2 }} />}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+          <div style={{display:"flex",gap:7}}>
+            <button className="btn" onClick={printReport} style={{padding:"8px 12px",background:"#fff2",color:"#fff",fontSize:12}}>🖨️ Report</button>
+            <button className="btn" onClick={()=>setImportOpen(true)} style={{padding:"8px 12px",background:"#fff2",color:"#fff",fontSize:12}}>⬆️ Import</button>
           </div>
         </div>
-      );
-    }
-
-    function TimelineGroup({ title, date, evts, att, setEvtOpen }) {
-      return (
-        <div className="card" style={{ minWidth: "85%", flexShrink: 0, scrollSnapAlign: "center", padding: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: "#1F2937" }}>{title}</div>
-            <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600 }}>{dispDate(date)}</div>
-          </div>
-          {evts.length === 0 ? (
-            <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13, background: "#F9FAFB", borderRadius: 12 }}>No classes scheduled</div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {evts.map(e => <EventCard key={e.id} evt={e} att={att} onClick={() => setEvtOpen(e)} />)}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    function EventCard({ evt, att, onClick }) {
-      const isWard = evt.type === 'ward';
-      const color = evt.dept?.color || (isWard ? "#0EA5E9" : "#6C63FF");
-      const sm = att[evt.id] ? STATUS[att[evt.id]] : null;
-
-      return (
-        <div onClick={onClick} style={{ display: "flex", background: "#F9FAFB", borderRadius: 12, overflow: "hidden", cursor: "pointer", border: "1px solid #F3F4F6", transition: "transform 0.1s" }}>
-          <div style={{ width: 6, background: color, flexShrink: 0 }} />
-          <div style={{ padding: "10px 12px", flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
-                <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase", letterSpacing: 0.5 }}>{evt.module || "General"}</span>
-                {isWard && <span style={{ fontSize: 9, background: "#E0F2FE", color: "#0284C7", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>WARD • {evt.shift}</span>}
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{evt.topic}</div>
-              <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{isWard ? evt.teacher : `${fmt12(evt.start)} ${evt.end ? `- ${fmt12(evt.end)}` : ""}`}</div>
-            </div>
-            {sm ? <div style={{ fontSize: 18 }}>{sm.icon}</div> : <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px dashed #D1D5DB" }} />}
-          </div>
-        </div>
-      );
-    }
-
-    // ─── ATTENDANCE TAB ───────────────────────────────────────────────────────────
-    function AttTab({ events, att, target, setTarget, setEvtOpen }) {
-      const [filter, setFilter] = useState("Overall");
-
-      const modules = useMemo(() => {
-        const s = new Set();
-        events.forEach(e => { if (e.type === 'lecture' && e.module) s.add(e.module); });
-        const arr = ["Overall"];
-        if (events.some(e => e.type === 'ward')) arr.push("Wards");
-        return [...arr, ...Array.from(s).sort()];
-      }, [events]);
-
-      const filteredEvents = useMemo(() => {
-        if (filter === "Overall") return events.filter(e => e.type === 'lecture');
-        if (filter === "Wards") return events.filter(e => e.type === 'ward');
-        return events.filter(e => e.module === filter);
-      }, [events, filter]);
-
-      const stats = calculateStats(filteredEvents, att, target);
-
-      const subjectStats = useMemo(() => {
-        const map = {};
-        filteredEvents.forEach(e => {
-          const dName = e.dept?.name || "General";
-          if (!map[dName]) map[dName] = { name: dName, color: e.dept?.color, evts: [] };
-          map[dName].evts.push(e);
-        });
-        return Object.values(map).map(sub => ({ ...sub, stats: calculateStats(sub.evts, att, target) }));
-      }, [filteredEvents, att, target]);
-
-      return (
-        <div className="slide">
-          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Target:</span>
-            {[75, 80, 85].map(t => (
-              <button key={t} className="btn" onClick={() => setTarget(t)} style={{ padding: "4px 10px", fontSize: 12, background: target === t ? "#1F2937" : "#E5E7EB", color: target === t ? "#fff" : "#4B5563", borderRadius: 8 }}>{t}%</button>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 12, margin: "0 -14px", paddingLeft: 14, paddingRight: 14, scrollSnapType: "x mandatory" }}>
-            {modules.map(m => (
-              <button key={m} className="btn" onClick={() => setFilter(m)}
-                style={{ padding: "8px 16px", background: filter === m ? "#6C63FF" : "#fff", color: filter === m ? "#fff" : "#6B7280", borderRadius: 20, fontSize: 13, whiteSpace: "nowrap", scrollSnapAlign: "start", border: filter === m ? "1px solid #6C63FF" : "1px solid #E5E7EB", boxShadow: filter === m ? "0 4px 12px rgba(108,99,255,0.2)" : "none" }}>
-                {m}
-              </button>
-            ))}
-          </div>
-
-          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 2 }}>{filter} Attendance</div>
-                <div style={{ fontSize: 13, color: "#6B7280" }}>{stats.totalMarked} marked out of {stats.scheduled} scheduled</div>
-              </div>
-              <div style={{ background: stats.currentPct >= target ? "#DCFCE7" : "#FEE2E2", color: stats.currentPct >= target ? "#16A34A" : "#DC2626", padding: "6px 12px", borderRadius: 12, fontWeight: 800, fontSize: 18 }}>
-                {stats.currentPct}%
-              </div>
-            </div>
-
-            <div style={{ background: "#F9FAFB", padding: 14, borderRadius: 12, border: "1px dashed #D1D5DB" }}>
-              {stats.scheduled === 0 ? (
-                <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center" }}>No schedule imported for this module.</div>
-              ) : stats.isImpossible ? (
-                <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600 }}>❌ Mathematically impossible to reach {target}%. (Need {stats.needMore} more, but only {stats.unmarkedRemaining} remain).</div>
-              ) : stats.needMore > 0 ? (
-                <div style={{ color: "#D97706", fontSize: 13, fontWeight: 600 }}>⚠️ Need <span style={{ fontSize: 16, fontWeight: 800 }}>{stats.needMore}</span> more classes out of the {stats.unmarkedRemaining} remaining schedule to secure {target}%.</div>
-              ) : (
-                <div style={{ color: "#16A34A", fontSize: 13, fontWeight: 600 }}>✅ Target secured! You can safely skip {stats.skipsLeft} more classes.</div>
-              )}
-            </div>
-          </div>
-
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12, color: "#374151" }}>Subject Breakdown</div>
-          {subjectStats.map(sub => (
-            <div key={sub.name} className="card" style={{ marginBottom: 10, padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: (sub.color || "#6C63FF") + "22", display: "flex", alignItems: "center", justifyContent: "center", color: sub.color || "#6C63FF", fontWeight: 800, fontSize: 14 }}>
-                {sub.stats.currentPct}%
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: "#1F2937", marginBottom: 2 }}>{sub.name}</div>
-                <div style={{ fontSize: 12, color: "#6B7280" }}>{sub.stats.attended} attended • {sub.stats.missed} missed</div>
-              </div>
-              <div style={{ textAlign: "right", fontSize: 11, fontWeight: 600, color: sub.stats.needMore > 0 ? "#EF4444" : "#22C55E" }}>
-                {sub.stats.needMore > 0 ? `Need ${sub.stats.needMore}` : "Safe"}
-              </div>
+        <div style={{display:"flex",gap:8}}>
+          {[{v:`${ov.pct}%`,l:"Overall"},{v:ov.attended,l:"Attended"},{v:ov.total,l:"Total"},{v:canSkip(ov.attended,ov.total,target),l:"Can Skip"}].map(s=>(
+            <div key={s.l} style={{flex:1,background:"#fff2",borderRadius:12,padding:"10px 6px",textAlign:"center"}}>
+              <div style={{fontSize:19,fontWeight:800}}>{s.v}</div>
+              <div style={{fontSize:9,opacity:.82,marginTop:1}}>{s.l}</div>
             </div>
           ))}
         </div>
-      );
-    }
+      </div>
 
-    // ─── BOTTOM SHEETS ────────────────────────────────────────────────────────────
-    function DaySheet({ date, events, att, setEvtOpen, onClose }) {
-      const evts = events.filter(e => e.date === date).sort((a, b) => {
-        if (a.type !== b.type) return a.type === 'ward' ? -1 : 1;
-        return t2m(a.start) - t2m(b.start);
-      });
-      return (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-            <div>
-              <div style={{ fontWeight: 800, fontSize: 20 }}>{new Date(date).toLocaleDateString("en-IN", { weekday: "long" })}</div>
-              <div style={{ color: "#6B7280", fontSize: 13 }}>{dispDate(date)}</div>
-            </div>
-            <button className="btn" onClick={onClose} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 13 }}>✕</button>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {evts.map(e => <EventCard key={e.id} evt={e} att={att} onClick={() => setEvtOpen(e)} />)}
-          </div>
-        </div>
-      );
-    }
+      <div style={{padding:"0 13px",marginTop:-16}}>
+        {tab==="calendar"   && <CalTab {...{calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att,setDayOpen}}/>}
+        {tab==="attendance" && <AttTab {...{subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecsOnDate,calYear,calMonth,setCalYear,setCalMonth}}/>}
+        {tab==="subjects"   && <SubTab {...{subjects,lectures,setLectures,subStats,target,deleteSub,setAddSubOpen,setAddLecOpen,att,setLecOpen}}/>}
+        {tab==="bunk"       && <BunkTab {...{subjects,subStats,target}}/>}
+      </div>
 
-    function EvtSheet({ evt, att, mark, clearMark, onEdit, onClose }) {
-      const current = att[evt.id];
-      const isWard = evt.type === 'ward';
-      const color = evt.dept?.color || "#6C63FF";
+      {/* BOTTOM NAV */}
+      <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:"1px solid #EBEBEB",display:"flex",zIndex:40,boxShadow:"0 -4px 20px #0000001a"}}>
+        {[{id:"calendar",icon:"📅",label:"Calendar"},{id:"attendance",icon:"📊",label:"Attendance"},{id:"subjects",icon:"📚",label:"Subjects"},{id:"bunk",icon:"🧮",label:"Bunk Calc"}].map(t=>(
+          <button key={t.id} className="btn" onClick={()=>setTab(t.id)}
+            style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"10px 0 8px",color:tab===t.id?"#6C63FF":"#9CA3AF",background:"none",borderRadius:0,fontSize:10,fontWeight:tab===t.id?700:500}}>
+            <span style={{fontSize:20}}>{t.icon}</span>{t.label}
+            {tab===t.id&&<div style={{width:20,height:3,background:"#6C63FF",borderRadius:2}}/>}
+          </button>
+        ))}
+      </div>
 
-      return (
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-            <span className="chip" style={{ background: color + "20", color }}>{evt.dept?.name || "General"}</span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn" onClick={onEdit} style={{ padding: "6px 12px", background: "#E0F2FE", color: "#0284C7", fontSize: 12 }}>✏️ Edit</button>
-              <button className="btn" onClick={onClose} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 12 }}>✕</button>
-            </div>
-          </div>
-          <div style={{ fontWeight: 800, fontSize: 18, color: "#1F2937", lineHeight: 1.3, marginBottom: 16 }}>{evt.topic}</div>
+      {dayOpen&&<div className="overlay" onClick={()=>setDayOpen(null)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <DaySheet date={dayOpen} lecsOnDate={lecsOnDate} subjects={subjects} att={att} onSelectLec={l=>setLecOpen(l)} onClose={()=>setDayOpen(null)}/>
+      </div></div>}
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
-            {[
-              ["📅 Date", dispDate(evt.date)],
-              ["⏰ Time", isWard ? `${evt.shift} Shift` : `${fmt12(evt.start)}`],
-              ["📚 Module", evt.module || "General"],
-              ["👤 Teacher", evt.teacher || "—"]
-            ].map(([lb, v]) => (
-              <div key={lb} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", border: "1px solid #F3F4F6" }}>
-                <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>{lb}</div>
-                <div style={{ fontWeight: 700, fontSize: 13, color: "#374151" }}>{v}</div>
-              </div>
-            ))}
-          </div>
+      {lecOpen&&<div className="overlay" onClick={()=>setLecOpen(null)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <LecSheet lec={lecOpen} subjects={subjects} att={att} mark={mark} clearMark={clearMark} onClose={()=>setLecOpen(null)}/>
+      </div></div>}
 
-          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>Mark Status</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {Object.entries(STATUS).map(([k, { icon, label, bg, fg, fill }]) => (
-              <button key={k} className="btn" onClick={() => mark(evt.id, k)}
-                style={{ padding: "14px 10px", background: current === k ? fill : bg, color: current === k ? "#fff" : fg, border: `2px solid ${current === k ? fill : fg + "30"}`, fontSize: 14, display: "flex", alignItems: "center", justifycontent: "center", gap: 8, borderRadius: 14 }}>
-                {icon} {label}
-              </button>
-            ))}
-          </div>
-          {current && <button className="btn" onClick={() => clearMark(evt.id)} style={{ width: "100%", padding: 14, background: "#F3F4F6", color: "#6B7280", fontSize: 14, marginTop: 12 }}>Clear Mark</button>}
-        </div>
-      );
-    }
+      {importOpen&&<div className="overlay" onClick={()=>setImportOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <ImportSheet onImport={doImport} onClose={()=>setImportOpen(false)}/>
+      </div></div>}
 
-    function EditSheet({ evt, onSave, onClose }) {
-      const [form, setForm] = useState({ ...evt });
-      return (
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>Edit Details</div>
-          <label>Topic</label><input value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} />
-          <label>Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
-          {!form.type || form.type === 'lecture' ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div><label>Start</label><input type="time" value={form.start || ""} onChange={e => setForm({ ...form, start: e.target.value })} /></div>
-              <div><label>Module</label><input value={form.module || ""} onChange={e => setForm({ ...form, module: e.target.value })} /></div>
-            </div>
-          ) : (
-            <div><label>Teacher/SR</label><input value={form.teacher || ""} onChange={e => setForm({ ...form, teacher: e.target.value })} /></div>
-          )}
-          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-            <button className="btn" onClick={onClose} style={{ flex: 1, padding: 14, background: "#F3F4F6", color: "#6B7280" }}>Cancel</button>
-            <button className="btn" onClick={() => onSave(form)} style={{ flex: 1, padding: 14, background: "#6C63FF", color: "#fff" }}>Save</button>
-          </div>
-        </div>
-      );
-    }
+      {addSubOpen&&<div className="overlay" onClick={()=>setAddSubOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <AddSubSheet onSave={s=>{setSubjects(p=>[...p,{...s,id:Date.now()}]);setAddSubOpen(false);showToast("Added");}} onClose={()=>setAddSubOpen(false)}/>
+      </div></div>}
 
-    function ImportSheet({ onImport, onClose }) {
-      const [mode, setMode] = useState("lectures");
-      const [text, setText] = useState("");
-      const [moduleName, setModuleName] = useState("GIT");
+      {addLecOpen&&<div className="overlay" onClick={()=>setAddLecOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <AddLecSheet subjects={subjects} onSave={l=>{setLectures(p=>[...p,{...l,id:Date.now()}]);setAddLecOpen(false);showToast("Added");}} onClose={()=>setAddLecOpen(false)}/>
+      </div></div>}
 
-      const promptText = `Act as an expert data extractor. I am a Final Year MBBS student at King Edward Medical University and need this timetable converted to a precise CSV format. 
-Extract the data into a pure CSV table (no markdown code blocks, just raw text). 
+      {toast&&<div style={{position:"fixed",bottom:92,left:"50%",transform:"translateX(-50%)",background:toast.err?"#EF4444":"#1F2937",color:"#fff",padding:"11px 20px",borderRadius:14,fontSize:13,fontWeight:500,zIndex:200,animation:"su .2s ease",whiteSpace:"nowrap",boxShadow:"0 4px 20px #0003"}}>{toast.msg}</div>}
+    </div>
+  );
+}
 
-RULES:
-For regular lectures use columns exactly: Subject, Date (YYYY-MM-DD), Start Time, End Time, Teacher.
-For Wards use columns exactly: Date (YYYY-MM-DD), Day, Morning Class Topic, Morning Teacher, Evening Class, Senior Registrar.
-Do not include empty rows. Ensure strict date formatting.`;
+// ─── CALENDAR TAB ─────────────────────────────────────────────────────────────
+// Layout exactly like Image 1: month title, day headers (SUN MON...), 
+// then vertical day-cards in a horizontal scroll per week row
+function CalTab({calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att,setDayOpen}){
+  const today=todayISO();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const firstDay=new Date(calYear,calMonth,1).getDay();
+  const monthLabel=new Date(calYear,calMonth,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"});
+  const prevMonth=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);};
+  const nextMonth=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);};
+  const todayLecs=lecsOnDate(today);
 
-      return (
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>Import Timetable</div>
-
-          <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 12, padding: 4, marginBottom: 16 }}>
-            {[{ id: "lectures", label: "Lectures" }, { id: "wards", label: "Wards" }, { id: "ai", label: "✨ AI Prompt" }].map(m => (
-              <button key={m.id} className="btn" onClick={() => setMode(m.id)} style={{ flex: 1, padding: "8px 0", background: mode === m.id ? "#fff" : "transparent", color: mode === m.id ? "#1F2937" : "#6B7280", borderRadius: 8, fontSize: 13, boxShadow: mode === m.id ? "0 2px 6px rgba(0,0,0,0.05)" : "none" }}>{m.label}</button>
-            ))}
-          </div>
-
-          {mode === "ai" ? (
-            <div className="slide">
-              <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 12 }}>Copy this prompt and paste it into ChatGPT, Claude, or Gemini along with a photo/PDF of your timetable. Paste the resulting CSV back into the Lectures or Wards tab.</div>
-              <textarea readOnly value={promptText} rows={8} style={{ fontSize: 12, lineHeight: 1.5, background: "#F9FAFB", marginBottom: 12 }} />
-              <button className="btn" onClick={() => { navigator.clipboard.writeText(promptText); alert("Copied!"); }} style={{ width: "100%", padding: 14, background: "#1F2937", color: "#fff" }}>📋 Copy Prompt</button>
-            </div>
-          ) : (
-            <div className="slide">
-              {mode === "lectures" && (
-                <div style={{ marginBottom: 12 }}>
-                  <label>Assign to Module / Block Name</label>
-                  <input value={moduleName} onChange={e => setModuleName(e.target.value)} placeholder="e.g., GIT, Renal, Medicine" />
-                </div>
-              )}
-              <textarea rows={6} value={text} onChange={e => setText(e.target.value)} placeholder={`Paste ${mode === "wards" ? "Wards CSV (Date, Day, Morning Class, Evening...)" : "Lectures CSV (Subject, Date, Start, End...)"} here...`} style={{ fontFamily: "monospace", fontSize: 11, marginBottom: 12, whiteSpace: "pre" }} />
-              <button className="btn" onClick={() => onImport(text, mode, moduleName)} style={{ width: "100%", padding: 14, background: "#6C63FF", color: "#fff", fontSize: 15 }}>Upload Data</button>
-            </div>
-          )}
-          <button className="btn" onClick={onClose} style={{ width: "100%", padding: 14, background: "transparent", color: "#6B7280", fontSize: 14, marginTop: 8 }}>Cancel</button>
-        </div>
-      );
-    }
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
-</body>
-</html>
+  // Build weeks array
+  const totalCells=firstDay+daysInMonth;
+  const weeks=[];
+  for(let w=0;w<Math.ceil(totalCells/7);w++){
+    const week=[];
+    for(let d=0;d<7;d++){
+      const cellIdx=w*7+d;
+      const day=cellIdx-firstDay+1;
+      week.push(day>=1&&day<=daysInMonth?day:null
