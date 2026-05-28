@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 
-// ─── CLEAN SPAN ARTIFACTS ────────────────────────────────────────────────────
+// ─── UTILITIES ────────────────────────────────────────────────────────────
 function clean(s) {
   if (!s) return "";
   return s.replace(/\[span_\d+\]\((start|end)_span\)/gi,"")
@@ -9,7 +9,6 @@ function clean(s) {
           .replace(/\s{2,}/g," ").trim();
 }
 
-// ─── DEPARTMENT DETECTION ────────────────────────────────────────────────────
 const DEPTS = [
   { test: c=>/psy/i.test(c),                               name:"Psychiatry",     color:"#9B59B6" },
   { test: c=>/obs|gyn/i.test(c),                           name:"Obs & Gynae",    color:"#E84393" },
@@ -18,18 +17,19 @@ const DEPTS = [
   { test: c=>/surg/i.test(c),                              name:"Surgery",        color:"#FF6B6B" },
   { test: c=>/med|\/ge\b/i.test(c),                        name:"Medicine",       color:"#4ECDC4" },
 ];
+
 function detectDept(raw) {
   const c = clean(raw||"");
   if (!c||c==="N/A") return {name:"General",color:"#6C63FF"};
   for (const d of DEPTS) if (d.test(c)) return {name:d.name,color:d.color};
   return {name:"General",color:"#6C63FF"};
 }
+
 function parseGITNum(raw) {
   const m = clean(raw||"").match(/GIT0*(\d+)/i);
   return m ? parseInt(m[1]) : null;
 }
 
-// ─── TIME / DATE ─────────────────────────────────────────────────────────────
 function xlFrac(raw) {
   if (!raw||raw==="N/A") return null;
   const s=String(raw).trim();
@@ -38,9 +38,11 @@ function xlFrac(raw) {
   if (!isNaN(n)&&n>0&&n<1){const m=Math.round(n*24*60);return `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;}
   return null;
 }
+
 function fmt12(t){if(!t)return"—";const[h,m]=t.split(":").map(Number);return`${h>12?h-12:h||12}:${String(m).padStart(2,"0")} ${h>=12?"PM":"AM"}`;}
 function t2m(t){if(!t)return 0;const[h,m]=t.split(":").map(Number);return h*60+m;}
 function xlSerial(n){const d=new Date(1899,11,30);d.setDate(d.getDate()+Math.round(Number(n)));return d.toISOString().slice(0,10);}
+
 function parseDate(raw){
   if(!raw)return null;const s=String(raw).trim();
   if(/^\d+$/.test(s)&&Number(s)>40000)return xlSerial(Number(s));
@@ -49,13 +51,14 @@ function parseDate(raw){
   const f=parseFloat(s);if(!isNaN(f)&&f>40000)return xlSerial(f);
   return null;
 }
+
 function todayISO(){return new Date().toISOString().slice(0,10);}
+function tomorrowISO(){const d=new Date();d.setDate(d.getDate()+1);return d.toISOString().slice(0,10);}
 function dispDate(iso){if(!iso)return"";const[y,m,d]=iso.split("-");return`${d}/${m}/${y}`;}
 function pct(a,t){return t===0?0:Math.round(a/t*100);}
 function needMore(a,t,tgt){if(pct(a,t)>=tgt)return 0;const r=tgt/100;return Math.ceil((r*t-a)/(1-r));}
 function canSkip(a,t,tgt){return Math.max(0,Math.floor(a/(tgt/100)-t));}
 
-// ─── CSV PARSER ───────────────────────────────────────────────────────────────
 function parseFile(raw){
   const cleaned=raw.replace(/\[span_\d+\]\((start|end)_span\)/gi,"").replace(/\[span_\d+\]/gi,"");
   const lines=cleaned.split(/\r?\n/).filter(Boolean);
@@ -71,26 +74,21 @@ function parseFile(raw){
     const cells=line.split(sep).map(strip);
     const topic=clean(iS>=0?cells[iS]||"":cells[0]||"");
     if(!topic)return;
-    // Skip truly non-attendance rows; keep class assessments
     if(/^(holiday|tentative|eid|break|end of|clinical|week\s|day\s*\d)/i.test(topic))return;
     const dayRaw=iD>=0?cells[iD]||"":"",startRaw=iSt>=0?cells[iSt]||"":"",
           endRaw=iE>=0?cells[iE]||"":"",codeRaw=clean(iC>=0?cells[iC]||"":"");
-    // For "Class Assessment" rows the topic IS the dept name (e.g. "Peds Surgery")
-    // The code column holds the dept identifier; if blank, try to detect from topic itself
     const isAssessment=/class\s*assessment/i.test(topic);
-    // If it's an assessment, the actual dept name may appear after the colon or be in the code
-    // e.g. "Class Assessment" with code "Peds Surgery" or topic "Class Assessment — Peds Surgery"
     const assessLabel=isAssessment
       ? (codeRaw&&codeRaw.length>0&&!/^N\/A$/i.test(codeRaw)?codeRaw:topic)
       : topic;
     const finalTopic=isAssessment?`📝 Class Assessment${codeRaw&&!/^N\/A$/i.test(codeRaw)?" — "+codeRaw:""}`  :topic;
-    // dept: for assessments try to detect from codeRaw first, then from assessLabel
     const dept=detectDept(codeRaw)||detectDept(assessLabel)||{name:"General",color:"#6C63FF"};
     rows.push({topic:finalTopic,dept,gitNum:parseGITNum(codeRaw),code:codeRaw,
                date:parseDate(dayRaw),start:xlFrac(startRaw),end:xlFrac(endRaw),isAssessment});
   });
   return rows;
 }
+
 function buildFromRows(rows,existingSubs=[]){
   const map={};existingSubs.forEach(s=>{map[s.name]=s;});
   let nsi=existingSubs.length?Math.max(...existingSubs.map(s=>s.id))+1:1,nli=Date.now();
@@ -99,12 +97,20 @@ function buildFromRows(rows,existingSubs=[]){
     const {name:dn,color:dc}=r.dept;
     if(!map[dn]){const s={id:nsi++,name:dn,color:dc};map[dn]=s;subjects.push(s);}
     lectures.push({id:nli++,subjectId:map[dn].id,topic:r.topic,gitNum:r.gitNum,
-                   code:r.code,date:r.date,start:r.start,end:r.end,isAssessment:!!r.isAssessment});
+                   code:r.code,date:r.date,start:r.start,end:r.end,isAssessment});
   });
   return{subjects,lectures};
 }
 
-// ─── RING ─────────────────────────────────────────────────────────────────────
+// ─── STATUS ────────────────────────────────────────────────────────────
+const STATUS={
+  attended: {icon:"✅",label:"Attended", bg:"#E6FAF8",fg:"#2DB8AB",fill:"#22C55E"},
+  missed:   {icon:"❌",label:"Missed",   bg:"#FFE8E8",fg:"#EF4444",fill:"#EF4444"},
+  cancelled:{icon:"🚫",label:"Cancelled",bg:"#F3F4F6",fg:"#6B7280",fill:"#374151"},
+  holiday:  {icon:"🏖️",label:"Holiday",  bg:"#FFFBEB",fg:"#D97706",fill:"#F59E0B"},
+};
+
+// ─── RING ────────────────────────────────────────────────────────────
 function Ring({value,target,size=80,stroke=8,color="#6C63FF"}){
   const r=(size-stroke)/2,circ=2*Math.PI*r,dash=Math.min(Math.max(value,0),100)/100*circ;
   return(<svg width={size} height={size} style={{transform:"rotate(-90deg)"}}>
@@ -115,16 +121,10 @@ function Ring({value,target,size=80,stroke=8,color="#6C63FF"}){
   </svg>);
 }
 
-// ─── STATUS ───────────────────────────────────────────────────────────────────
-const STATUS={
-  attended: {icon:"✅",label:"Attended", bg:"#E6FAF8",fg:"#2DB8AB",fill:"#22C55E"},
-  missed:   {icon:"❌",label:"Missed",   bg:"#FFE8E8",fg:"#EF4444",fill:"#EF4444"},
-  cancelled:{icon:"🚫",label:"Cancelled",bg:"#F3F4F6",fg:"#6B7280",fill:"#374151"},
-  holiday:  {icon:"🏖️",label:"Holiday",  bg:"#FFFBEB",fg:"#D97706",fill:"#F59E0B"},
-};
-
-// ─── ROOT ─────────────────────────────────────────────────────────────────────
+// ─── ROOT ────────────────────────────────────────────────────────────
 export default function App(){
+  const[modules,setModules]=useState([]);
+  const[currentModuleId,setCurrentModuleId]=useState(null);
   const[subjects,setSubjects]=useState([]);
   const[lectures,setLectures]=useState([]);
   const[att,setAtt]=useState({});
@@ -135,42 +135,73 @@ export default function App(){
   const[calMonth,setCalMonth]=useState(now.getMonth());
   const[dayOpen,setDayOpen]=useState(null);
   const[lecOpen,setLecOpen]=useState(null);
+  const[lecEditOpen,setLecEditOpen]=useState(null);
   const[importOpen,setImportOpen]=useState(false);
   const[addSubOpen,setAddSubOpen]=useState(false);
   const[addLecOpen,setAddLecOpen]=useState(false);
+  const[addModuleOpen,setAddModuleOpen]=useState(false);
+  const[wardTab,setWardTab]=useState(false);
   const[toast,setToast]=useState(null);
+  const[needMoreOpen,setNeedMoreOpen]=useState(false);
 
   const showToast=(msg,err=false)=>{setToast({msg,err});setTimeout(()=>setToast(null),2800);};
   const mark=(id,status)=>{setAtt(p=>({...p,[id]:status}));setLecOpen(null);showToast(`Marked as ${status}`);};
   const clearMark=(id)=>{setAtt(p=>{const n={...p};delete n[id];return n;});setLecOpen(null);showToast("Cleared");};
 
+  const today=todayISO();
+  const tomorrow=tomorrowISO();
+
   const lecsOnDate=useCallback((iso)=>
-    lectures.filter(l=>l.date===iso).sort((a,b)=>t2m(a.start)-t2m(b.start)),[lectures]);
+    lectures.filter(l=>l.date===iso&&l.moduleId===currentModuleId).sort((a,b)=>t2m(a.start||"00:00")-t2m(b.start||"00:00")),[lectures,currentModuleId]);
 
   const subStats=useCallback((sid)=>{
-    const ls=lectures.filter(l=>l.subjectId===sid&&l.date);
+    const ls=lectures.filter(l=>l.subjectId===sid&&l.date&&l.moduleId===currentModuleId);
     const cnt=ls.filter(l=>att[l.id]!=="cancelled"&&att[l.id]!=="holiday");
     const atd=cnt.filter(l=>att[l.id]==="attended").length;
     return{total:cnt.length,attended:atd,pct:pct(atd,cnt.length)};
-  },[lectures,att]);
+  },[lectures,att,currentModuleId]);
 
   const overall=useCallback(()=>{
     let tot=0,atd=0;subjects.forEach(s=>{const st=subStats(s.id);tot+=st.total;atd+=st.attended;});
     return{total:tot,attended:atd,pct:pct(atd,tot)};
   },[subjects,subStats]);
 
-  const doImport=(raw)=>{
+  const getNeedMoreLectures=useCallback((sid)=>{
+    const st=subStats(sid);
+    if(pct(st.attended,st.total)>=target)return{needed:0,lectures:[]};
+    const n=needMore(st.attended,st.total,target);
+    const unmarked=lectures.filter(l=>l.subjectId===sid&&l.moduleId===currentModuleId&&l.date&&!att[l.id])
+      .sort((a,b)=>new Date(a.date)-new Date(b.date));
+    return{needed:n,lectures:unmarked.slice(0,n)};
+  },[subStats,target,lectures,att,currentModuleId]);
+
+  const doImport=(raw,moduleName)=>{
     const rows=parseFile(raw);
     if(!rows.length){showToast("No lectures found",true);return;}
+    
+    let mid=currentModuleId;
+    if(moduleName&&!currentModuleId){
+      mid=Date.now();
+      const newMod={id:mid,name:moduleName,createdAt:new Date().toISOString()};
+      setModules(p=>[...p,newMod]);
+      setCurrentModuleId(mid);
+    }
+    
     const wd=rows.filter(r=>r.date).length;
     const{subjects:ns,lectures:nl}=buildFromRows(rows,subjects);
     setSubjects(ns);
     setLectures(prev=>{
       const ex=new Set(prev.map(l=>`${l.topic}|${l.date}`));
-      return[...prev,...nl.filter(l=>!ex.has(`${l.topic}|${l.date}`))];
+      return[...prev,...nl.map(l=>({...l,moduleId:mid})).filter(l=>!ex.has(`${l.topic}|${l.date}`))];
     });
     setImportOpen(false);
     showToast(`Imported ${nl.length} lectures (${wd} with dates)`);
+  };
+
+  const updateLecture=(lecId,updates)=>{
+    setLectures(p=>p.map(l=>l.id===lecId?{...l,...updates}:l));
+    setLecEditOpen(null);
+    showToast("Updated");
   };
 
   const deleteSub=(sid)=>{
@@ -182,42 +213,9 @@ export default function App(){
     showToast("Deleted");
   };
 
-  const printReport=()=>{
-    const ov=overall();
-    const dr=subjects.map(s=>{const st=subStats(s.id);
-      return`<tr><td style="border-left:4px solid ${s.color};padding-left:10px;font-weight:600">${s.name}</td>
-      <td>${st.attended}</td><td>${st.total}</td>
-      <td style="font-weight:700;color:${st.pct>=target?"#2DB8AB":"#EF4444"}">${st.pct}%</td>
-      <td>${st.pct>=target?`✅ Can skip ${canSkip(st.attended,st.total,target)}`:`⚠️ Need ${needMore(st.attended,st.total,target)} more`}</td></tr>`;
-    }).join("");
-    const lr=lectures.filter(l=>l.date&&att[l.id]).sort((a,b)=>a.date.localeCompare(b.date)).map(l=>{
-      const s=subjects.find(x=>x.id===l.subjectId),sm=STATUS[att[l.id]];
-      return`<tr><td>${dispDate(l.date)}</td><td>${s?.name||""}</td><td>${l.topic}</td><td style="color:${sm.fg}">${sm.icon} ${sm.label}</td></tr>`;
-    }).join("");
-    const win=window.open("","_blank");
-    win.document.write(`<!DOCTYPE html><html><head><title>Report</title>
-    <style>body{font-family:sans-serif;padding:28px;max-width:900px;margin:0 auto}h1{color:#6C63FF}
-    .row{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0}.stat{background:#f0efff;border-radius:10px;padding:14px 20px;text-align:center;min-width:90px}
-    .stat .v{font-size:26px;font-weight:800;color:#6C63FF}.stat .l{font-size:11px;color:#666;margin-top:2px}
-    h2{font-size:15px;color:#374151;margin:24px 0 8px}table{width:100%;border-collapse:collapse;font-size:13px}
-    th{background:#6C63FF;color:#fff;padding:9px 12px;text-align:left}td{padding:8px 12px;border-bottom:1px solid #eee}
-    tr:nth-child(even){background:#fafafa}@media print{.np{display:none}}</style></head><body>
-    <h1>📊 LectureTrack — Attendance Report</h1>
-    <p style="color:#666">Generated: ${new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})} · Target: ${target}%</p>
-    <div class="row">
-      <div class="stat"><div class="v">${ov.pct}%</div><div class="l">Overall</div></div>
-      <div class="stat"><div class="v">${ov.attended}</div><div class="l">Attended</div></div>
-      <div class="stat"><div class="v">${ov.total}</div><div class="l">Total</div></div>
-      <div class="stat"><div class="v">${canSkip(ov.attended,ov.total,target)}</div><div class="l">Can Skip</div></div>
-    </div>
-    <h2>Department Summary</h2>
-    <table><thead><tr><th>Department</th><th>Attended</th><th>Total</th><th>%</th><th>Status</th></tr></thead><tbody>${dr}</tbody></table>
-    ${lr?`<h2>Lecture Log</h2><table><thead><tr><th>Date</th><th>Dept</th><th>Topic</th><th>Status</th></tr></thead><tbody>${lr}</tbody></table>`:""}
-    <br><button class="np" onclick="window.print()" style="padding:12px 24px;background:#6C63FF;color:#fff;border:none;border-radius:10px;font-size:15px;cursor:pointer">🖨️ Print / Save PDF</button>
-    </body></html>`);win.document.close();
-  };
-
   const ov=overall();
+  const currentModule=modules.find(m=>m.id===currentModuleId);
+
   return(
     <div style={{fontFamily:"'DM Sans','Segoe UI',sans-serif",background:"#F0F2F8",minHeight:"100vh",maxWidth:480,margin:"0 auto",paddingBottom:86}}>
       <style>{`
@@ -234,7 +232,6 @@ export default function App(){
         .slide{animation:su .22s ease}
         @keyframes su{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         .chip{display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
-        .pulse{animation:pl 1.8s infinite}@keyframes pl{0%,100%{opacity:1}50%{opacity:.4}}
       `}</style>
 
       {/* HEADER */}
@@ -242,51 +239,98 @@ export default function App(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <div>
             <div style={{fontSize:11,opacity:.75,letterSpacing:.5}}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
-            <div style={{fontSize:24,fontWeight:800,letterSpacing:-.5}}>LectureTrack</div>
+            <div style={{fontSize:20,fontWeight:800,letterSpacing:-.5}}>LectureTrack</div>
+            {currentModule&&<div style={{fontSize:12,opacity:.9,marginTop:4}}>Module: {currentModule.name}</div>}
           </div>
           <div style={{display:"flex",gap:7}}>
-            <button className="btn" onClick={printReport} style={{padding:"8px 12px",background:"#fff2",color:"#fff",fontSize:12}}>🖨️ Report</button>
-            <button className="btn" onClick={()=>setImportOpen(true)} style={{padding:"8px 12px",background:"#fff2",color:"#fff",fontSize:12}}>⬆️ Import</button>
+            <button className="btn" onClick={()=>setAddModuleOpen(true)} style={{padding:"8px 12px",background:"#fff2",color:"#fff",fontSize:12}}>📁 Module</button>
+            <button className="btn" onClick={()=>setImportOpen(true)} style={{padding:"8px 12px",background:"#fff2",color:"#fff",fontSize:12}}>⬆️ CSV</button>
           </div>
         </div>
-        <div style={{display:"flex",gap:8}}>
+        {modules.length>0&&<div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:8}}>
+          {modules.map(m=>(
+            <button key={m.id} className="btn" onClick={()=>setCurrentModuleId(m.id)}
+              style={{padding:"6px 12px",background:currentModuleId===m.id?"#fff":"#fff3",color:"#fff",fontSize:11,flexShrink:0}}>
+              {m.name}
+            </button>
+          ))}
+        </div>}
+        <div style={{display:"flex",gap:8,marginTop:currentModule?8:0}}>
           {[{v:`${ov.pct}%`,l:"Overall"},{v:ov.attended,l:"Attended"},{v:ov.total,l:"Total"},{v:canSkip(ov.attended,ov.total,target),l:"Can Skip"}].map(s=>(
             <div key={s.l} style={{flex:1,background:"#fff2",borderRadius:12,padding:"10px 6px",textAlign:"center"}}>
-              <div style={{fontSize:19,fontWeight:800}}>{s.v}</div>
-              <div style={{fontSize:9,opacity:.82,marginTop:1}}>{s.l}</div>
+              <div style={{fontSize:17,fontWeight:800}}>{s.v}</div>
+              <div style={{fontSize:8,opacity:.82,marginTop:1}}>{s.l}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div style={{padding:"0 13px",marginTop:-16}}>
-        {tab==="calendar"   && <CalTab {...{calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att,setDayOpen}}/>}
-        {tab==="attendance" && <AttTab {...{subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecsOnDate,calYear,calMonth,setCalYear,setCalMonth}}/>}
-        {tab==="subjects"   && <SubTab {...{subjects,lectures,setLectures,subStats,target,deleteSub,setAddSubOpen,setAddLecOpen,att,setLecOpen}}/>}
-        {tab==="bunk"       && <BunkTab {...{subjects,subStats,target}}/>}
+      {/* TODAY & TOMORROW ────────────────────────────────────── */}
+      {!wardTab&&currentModule&&<div style={{padding:"0 13px",marginTop:16}}>
+        <div style={{fontWeight:800,fontSize:12,margin:"12px 0 8px",color:"#1F2937"}}>
+          TODAY · {new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"short"})}
+        </div>
+        {lecsOnDate(today).length===0
+          ?<div className="card" style={{padding:16,textAlign:"center",color:"#9CA3AF",marginBottom:10}}><div style={{fontSize:24,marginBottom:4}}>🎉</div>No classes</div>
+          :lecsOnDate(today).map(l=><LecCard key={l.id} lec={l} subjects={subjects} att={att} onClick={()=>setLecOpen(l)}/>)
+        }
+        <div style={{fontWeight:800,fontSize:12,margin:"12px 0 8px",color:"#1F2937"}}>
+          TOMORROW · {new Date(tomorrow).toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"short"})}
+        </div>
+        {lecsOnDate(tomorrow).length===0
+          ?<div className="card" style={{padding:16,textAlign:"center",color:"#9CA3AF",marginBottom:10}}><div style={{fontSize:24,marginBottom:4}}>😴</div>Rest day</div>
+          :lecsOnDate(tomorrow).map(l=><LecCard key={l.id} lec={l} subjects={subjects} att={att} onClick={()=>setLecOpen(l)}/>)
+        }
+      </div>}
+
+      <div style={{padding:"0 13px",marginTop:16}}>
+        {!wardTab&&currentModule&&(
+          <>
+            {tab==="calendar"   && <CalTab {...{calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att,setDayOpen}}/>}
+            {tab==="attendance" && <AttTab {...{subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecsOnDate,currentModuleId}}/>}
+            {tab==="subjects"   && <SubTab {...{subjects,lectures,subStats,target,deleteSub,setAddSubOpen,setAddLecOpen,att,setLecOpen,getNeedMoreLectures,setNeedMoreOpen,currentModuleId}}/>}
+            {tab==="bunk"       && <BunkTab {...{subjects,subStats,target}}/>}
+          </>
+        )}
       </div>
 
       {/* BOTTOM NAV */}
       <div style={{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:480,background:"#fff",borderTop:"1px solid #EBEBEB",display:"flex",zIndex:40,boxShadow:"0 -4px 20px #0000001a"}}>
-        {[{id:"calendar",icon:"📅",label:"Calendar"},{id:"attendance",icon:"📊",label:"Attendance"},{id:"subjects",icon:"📚",label:"Subjects"},{id:"bunk",icon:"🧮",label:"Bunk Calc"}].map(t=>(
-          <button key={t.id} className="btn" onClick={()=>setTab(t.id)}
-            style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"10px 0 8px",color:tab===t.id?"#6C63FF":"#9CA3AF",background:"none",borderRadius:0,fontSize:10,fontWeight:tab===t.id?700:500}}>
-            <span style={{fontSize:20}}>{t.icon}</span>{t.label}
-            {tab===t.id&&<div style={{width:20,height:3,background:"#6C63FF",borderRadius:2}}/>}
-          </button>
-        ))}
+        {!wardTab?(
+          [{id:"calendar",icon:"📅",label:"Calendar"},{id:"attendance",icon:"📊",label:"Attendance"},{id:"subjects",icon:"📚",label:"Subjects"},{id:"bunk",icon:"🧮",label:"Bunk"}].map(t=>(
+            <button key={t.id} className="btn" onClick={()=>setTab(t.id)}
+              style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"10px 0 8px",color:tab===t.id?"#6C63FF":"#9CA3AF",background:"none",borderRadius:0,fontSize:10,fontWeight:tab===t.id?700:500}}>
+              <span style={{fontSize:20}}>{t.icon}</span>{t.label}
+              {tab===t.id&&<div style={{width:20,height:3,background:"#6C63FF",borderRadius:2}}/>}
+            </button>
+          ))
+        ):(
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#6C63FF",fontSize:12,fontWeight:700}}>
+            🏥 Ward Attendance (Coming Soon)
+          </div>
+        )}
+        <button className="btn" onClick={()=>setWardTab(!wardTab)}
+          style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"10px 0 8px",color:wardTab?"#6C63FF":"#9CA3AF",background:"none",borderRadius:0,fontSize:10,fontWeight:wardTab?700:500}}>
+          <span style={{fontSize:20}}>🏥</span>Ward
+          {wardTab&&<div style={{width:20,height:3,background:"#6C63FF",borderRadius:2}}/>}
+        </button>
       </div>
 
+      {/* MODALS ────────────────────────────────────────────── */}
       {dayOpen&&<div className="overlay" onClick={()=>setDayOpen(null)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
         <DaySheet date={dayOpen} lecsOnDate={lecsOnDate} subjects={subjects} att={att} onSelectLec={l=>setLecOpen(l)} onClose={()=>setDayOpen(null)}/>
       </div></div>}
 
       {lecOpen&&<div className="overlay" onClick={()=>setLecOpen(null)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
-        <LecSheet lec={lecOpen} subjects={subjects} att={att} mark={mark} clearMark={clearMark} onClose={()=>setLecOpen(null)}/>
+        <LecSheet lec={lecOpen} subjects={subjects} att={att} mark={mark} clearMark={clearMark} onEdit={()=>setLecEditOpen(lecOpen)} onClose={()=>setLecOpen(null)}/>
+      </div></div>}
+
+      {lecEditOpen&&<div className="overlay" onClick={()=>setLecEditOpen(null)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <EditLecSheet lec={lecEditOpen} subjects={subjects} onSave={updates=>updateLecture(lecEditOpen.id,updates)} onClose={()=>setLecEditOpen(null)}/>
       </div></div>}
 
       {importOpen&&<div className="overlay" onClick={()=>setImportOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
-        <ImportSheet onImport={doImport} onClose={()=>setImportOpen(false)}/>
+        <ImportSheet onImport={doImport} onClose={()=>setImportOpen(false)} modules={modules}/>
       </div></div>}
 
       {addSubOpen&&<div className="overlay" onClick={()=>setAddSubOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
@@ -294,7 +338,15 @@ export default function App(){
       </div></div>}
 
       {addLecOpen&&<div className="overlay" onClick={()=>setAddLecOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
-        <AddLecSheet subjects={subjects} onSave={l=>{setLectures(p=>[...p,{...l,id:Date.now()}]);setAddLecOpen(false);showToast("Added");}} onClose={()=>setAddLecOpen(false)}/>
+        <AddLecSheet subjects={subjects} currentModuleId={currentModuleId} onSave={l=>{setLectures(p=>[...p,{...l,id:Date.now(),moduleId:currentModuleId}]);setAddLecOpen(false);showToast("Added");}} onClose={()=>setAddLecOpen(false)}/>
+      </div></div>}
+
+      {addModuleOpen&&<div className="overlay" onClick={()=>setAddModuleOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <AddModuleSheet onSave={m=>{const nm={...m,id:Date.now(),createdAt:new Date().toISOString()};setModules(p=>[...p,nm]);setCurrentModuleId(nm.id);setAddModuleOpen(false);showToast("Module added");}} onClose={()=>setAddModuleOpen(false)}/>
+      </div></div>}
+
+      {needMoreOpen&&<div className="overlay" onClick={()=>setNeedMoreOpen(false)}><div className="sheet slide" onClick={e=>e.stopPropagation()}>
+        <NeedMoreSheet lecId={needMoreOpen} subjects={subjects} lectures={lectures} getNeedMoreLectures={getNeedMoreLectures} onClose={()=>setNeedMoreOpen(false)}/>
       </div></div>}
 
       {toast&&<div style={{position:"fixed",bottom:92,left:"50%",transform:"translateX(-50%)",background:toast.err?"#EF4444":"#1F2937",color:"#fff",padding:"11px 20px",borderRadius:14,fontSize:13,fontWeight:500,zIndex:200,animation:"su .2s ease",whiteSpace:"nowrap",boxShadow:"0 4px 20px #0003"}}>{toast.msg}</div>}
@@ -302,157 +354,8 @@ export default function App(){
   );
 }
 
-// ─── CALENDAR TAB ─────────────────────────────────────────────────────────────
-// Layout exactly like Image 1: month title, day headers (SUN MON...), 
-// then vertical day-cards in a horizontal scroll per week row
-function CalTab({calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att,setDayOpen}){
-  const today=todayISO();
-  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
-  const firstDay=new Date(calYear,calMonth,1).getDay();
-  const monthLabel=new Date(calYear,calMonth,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"});
-  const prevMonth=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);};
-  const nextMonth=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);};
-  const todayLecs=lecsOnDate(today);
-
-  // Build weeks array
-  const totalCells=firstDay+daysInMonth;
-  const weeks=[];
-  for(let w=0;w<Math.ceil(totalCells/7);w++){
-    const week=[];
-    for(let d=0;d<7;d++){
-      const cellIdx=w*7+d;
-      const day=cellIdx-firstDay+1;
-      week.push(day>=1&&day<=daysInMonth?day:null);
-    }
-    weeks.push(week);
-  }
-
-  return(
-    <div className="slide" style={{paddingTop:18}}>
-      {/* Month nav */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"0 2px"}}>
-        <button className="btn" onClick={prevMonth} style={{padding:"6px 14px",background:"#fff",fontSize:14,color:"#374151",boxShadow:"0 1px 6px #0001",borderRadius:10}}>‹ Prev</button>
-        <div style={{fontWeight:800,fontSize:16,color:"#1F2937"}}>● {monthLabel}</div>
-        <button className="btn" onClick={nextMonth} style={{padding:"6px 14px",background:"#fff",fontSize:14,color:"#374151",boxShadow:"0 1px 6px #0001",borderRadius:10}}>Next ›</button>
-      </div>
-
-      {/* Legend */}
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10,padding:"0 2px"}}>
-        {subjects.map(s=>(
-          <div key={s.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#6B7280",fontWeight:500}}>
-            <div style={{width:8,height:8,borderRadius:"50%",background:s.color}}/>
-            {s.name}
-          </div>
-        ))}
-      </div>
-
-      {/* Day labels row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4,padding:"0 2px"}}>
-        {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=>(
-          <div key={d} style={{textAlign:"center",fontSize:9,fontWeight:700,color:"#9CA3AF",padding:"4px 0",background:"#fff",borderRadius:8}}>{d}</div>
-        ))}
-      </div>
-
-      {/* Week rows */}
-      {weeks.map((week,wi)=>(
-        <div key={wi} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3,padding:"0 2px"}}>
-          {week.map((day,di)=>{
-            if(!day) return <div key={di}/>;
-            const iso=`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-            const lecs=lecsOnDate(iso);
-            const isToday=iso===today;
-            const hasLec=lecs.length>0;
-
-            // Determine fill color based on attendance
-            const statuses=lecs.map(l=>att[l.id]).filter(Boolean);
-            const allAtt=hasLec&&lecs.every(l=>att[l.id]==="attended");
-            const allMiss=hasLec&&lecs.every(l=>att[l.id]==="missed");
-            const allCanc=hasLec&&lecs.every(l=>att[l.id]==="cancelled");
-            const anyMiss=statuses.includes("missed");
-            const anyAtt=statuses.includes("attended");
-            const fullyMarked=hasLec&&lecs.every(l=>att[l.id]);
-
-            let cellBg="#fff";
-            if(allAtt) cellBg="#DCFCE7";
-            else if(allMiss) cellBg="#FEE2E2";
-            else if(allCanc) cellBg="#F3F4F6";
-            else if(anyMiss) cellBg="#FEF9C3"; // mixed
-
-            return(
-              <div key={di} onClick={()=>{if(hasLec)setDayOpen(iso);}}
-                style={{
-                  background:cellBg,
-                  borderRadius:10,
-                  border:isToday?"2px solid #6C63FF":"2px solid #E5E7EB",
-                  cursor:hasLec?"pointer":"default",
-                  minHeight:hasLec?90:60,
-                  display:"flex",flexDirection:"column",
-                  overflow:"hidden",
-                  transition:"background .2s",
-                  boxShadow:isToday?"0 0 0 2px #6C63FF22":"none",
-                }}>
-                {/* Day number header */}
-                <div style={{display:"flex",alignItems:"center",gap:2,padding:"4px 4px 2px"}}>
-                  <span style={{fontSize:10,fontWeight:700,color:"#9CA3AF"}}>{String(day).padStart(2,"0")}</span>
-                  <span style={{fontSize:8,fontWeight:600,color:"#9CA3AF"}}>
-                    {["SU","MO","TU","WE","TH","FR","SA"][di]}
-                  </span>
-                </div>
-
-                {/* Lecture cards inside day — each with colored left bar like Image 1 */}
-                <div style={{flex:1,display:"flex",flexDirection:"column",gap:2,padding:"0 3px 4px"}}>
-                  {lecs.map(l=>{
-                    const sub=subjects.find(s=>s.id===l.subjectId);
-                    const col=sub?.color||"#6C63FF";
-                    const status=att[l.id];
-                    const sm=status?STATUS[status]:null;
-                    // fill color for this specific lecture
-                    let lBg="#F9FAFB";
-                    if(status==="attended") lBg="#DCFCE7";
-                    else if(status==="missed") lBg="#FEE2E2";
-                    else if(status==="cancelled") lBg="#E5E7EB";
-                    else if(status==="holiday") lBg="#FEF9C3";
-
-                    return(
-                      <div key={l.id} style={{display:"flex",borderRadius:5,overflow:"hidden",background:lBg}}>
-                        <div style={{width:3,background:col,flexShrink:0}}/>
-                        <div style={{flex:1,padding:"2px 3px"}}>
-                          <div style={{fontSize:7,fontWeight:700,color:col,letterSpacing:.2,lineHeight:1}}>
-                            {l.isAssessment?"📝 TEST":sub?.name?.slice(0,4)||"—"}
-                          </div>
-                          <div style={{fontSize:7,fontWeight:600,color:"#374151",lineHeight:1.2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
-                            {l.isAssessment?"Class Test":l.topic}
-                          </div>
-                          {!l.isAssessment&&l.gitNum&&<div style={{fontSize:6,color:"#9CA3AF",marginTop:1}}>#{l.gitNum}</div>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {/* Holiday label */}
-                  {!hasLec && day && (
-                    <div style={{fontSize:7,color:"#D1D5DB",textAlign:"center",marginTop:4}}>—</div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-
-      {/* Today section */}
-      <div style={{fontWeight:800,fontSize:14,margin:"16px 0 8px 2px",color:"#1F2937"}}>
-        Today · {new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"short"})}
-      </div>
-      {todayLecs.length===0
-        ?<div className="card" style={{padding:26,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:30,marginBottom:5}}>🎉</div>No classes today</div>
-        :todayLecs.map(l=><MiniCard key={l.id} lec={l} subjects={subjects} att={att} onClick={()=>setDayOpen(today)}/>)
-      }
-    </div>
-  );
-}
-
-// Mini card below calendar
-function MiniCard({lec,subjects,att,onClick}){
+// ─── LECTURE CARD ────────────────────────────────────────
+function LecCard({lec,subjects,att,onClick}){
   const sub=subjects.find(s=>s.id===lec.subjectId);
   const col=sub?.color||"#6C63FF";
   const sm=att[lec.id]?STATUS[att[lec.id]]:null;
@@ -474,7 +377,7 @@ function MiniCard({lec,subjects,att,onClick}){
   );
 }
 
-// ─── DAY SHEET ────────────────────────────────────────────────────────────────
+// ─── DAY SHEET ──────────────────────────────────────────
 function DaySheet({date,lecsOnDate,subjects,att,onSelectLec,onClose}){
   const lecs=lecsOnDate(date);
   const d=new Date(date+"T12:00:00");
@@ -507,7 +410,7 @@ function DaySheet({date,lecsOnDate,subjects,att,onSelectLec,onClose}){
                   </div>
                   <div style={{flexShrink:0}}>
                     {sm?<span className="chip" style={{background:sm.bg,color:sm.fg}}>{sm.icon} {sm.label}</span>
-                      :<span className="chip" style={{background:"#F3F4F6",color:"#9CA3AF"}}>Tap to mark</span>}
+                      :<span className="chip" style={{background:"#F3F4F6",color:"#9CA3AF"}}>Mark</span>}
                   </div>
                 </div>
               </div>
@@ -519,8 +422,8 @@ function DaySheet({date,lecsOnDate,subjects,att,onSelectLec,onClose}){
   );
 }
 
-// ─── LECTURE MARK SHEET ───────────────────────────────────────────────────────
-function LecSheet({lec,subjects,att,mark,clearMark,onClose}){
+// ─── LECTURE MARK SHEET ─────────────────────────────────
+function LecSheet({lec,subjects,att,mark,clearMark,onEdit,onClose}){
   const sub=subjects.find(s=>s.id===lec.subjectId),current=att[lec.id];
   return(
     <div>
@@ -553,19 +456,272 @@ function LecSheet({lec,subjects,att,mark,clearMark,onClose}){
         ))}
       </div>
       {current&&<button className="btn" onClick={()=>clearMark(lec.id)} style={{width:"100%",padding:12,background:"#F3F4F6",color:"#9CA3AF",fontSize:13,marginTop:10}}>Clear Mark</button>}
+      <button className="btn" onClick={onEdit} style={{width:"100%",padding:12,background:"#EEF0FF",color:"#6C63FF",fontSize:13,marginTop:8}}>✏️ Edit Lecture</button>
     </div>
   );
 }
 
-// ─── ATTENDANCE TAB — with individual subject mini-calendars ─────────────────
-function AttTab({subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecsOnDate,calYear,calMonth,setCalYear,setCalMonth}){
+// ─── EDIT LECTURE SHEET ─────────────────────────────────
+function EditLecSheet({lec,subjects,onSave,onClose}){
+  const[form,setForm]=useState(lec);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  return(
+    <div>
+      <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Edit Lecture</div>
+      <label>Topic</label><input value={form.topic} onChange={e=>set("topic",e.target.value)}/>
+      <label>Date</label><input type="date" value={form.date||""} onChange={e=>set("date",e.target.value)}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><label>Start</label><input type="time" value={form.start||""} onChange={e=>set("start",e.target.value)}/></div>
+        <div><label>End</label><input type="time" value={form.end||""} onChange={e=>set("end",e.target.value)}/></div>
+      </div>
+      <button className="btn" onClick={()=>onSave(form)} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:18}}>Save</button>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─── NEED MORE DETAILS SHEET ────────────────────────────
+function NeedMoreSheet({lecId,subjects,lectures,getNeedMoreLectures,onClose}){
+  const sub=subjects.find(s=>s.id===lecId);
+  const {needed,lectures:needLecs}=getNeedMoreLectures(lecId);
+  
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:18}}>{sub?.name}</div>
+          <div style={{fontSize:13,color:"#9CA3AF",marginTop:4}}>Need {needed} more lectures</div>
+        </div>
+        <button className="btn" onClick={onClose} style={{padding:"7px 13px",background:"#F3F4F6",color:"#6B7280",fontSize:13}}>✕</button>
+      </div>
+      <div style={{fontSize:12,color:"#6B7280",marginBottom:16,padding:12,background:"#F9FAFB",borderRadius:10}}>
+        Mark these {needLecs.length} upcoming unmarked lectures as attended to reach target:
+      </div>
+      {needLecs.map(l=>(
+        <div key={l.id} className="card" style={{marginBottom:10,padding:12}}>
+          <div style={{fontWeight:600,fontSize:13,color:"#1F2937",marginBottom:4}}>{l.topic}</div>
+          <div style={{fontSize:11,color:"#9CA3AF"}}>{dispDate(l.date)}{l.start?` · ${fmt12(l.start)}`:""}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── IMPORT SHEET ───────────────────────────────────────
+function ImportSheet({onImport,onClose,modules}){
+  const[mode,setMode]=useState("file");
+  const[text,setText]=useState("");
+  const[moduleName,setModuleName]=useState("");
+  
+  return(
+    <div>
+      <div style={{fontWeight:800,fontSize:18,marginBottom:6}}>Import Timetable CSV</div>
+      <div style={{color:"#6B7280",fontSize:13,marginBottom:12,lineHeight:1.55}}>
+        Upload CSV/TSV. Columns: <strong>Subject</strong>, <strong>Date</strong>, <strong>Start Time</strong>, <strong>End Time</strong>, <strong>Code</strong>
+      </div>
+
+      <label>Module Name</label>
+      <select value={moduleName} onChange={e=>setModuleName(e.target.value)}>
+        <option value="">Create new module...</option>
+        {modules.map(m=><option key={m.id} value={m.name}>{m.name}</option>)}
+      </select>
+      {moduleName===""&&(<input placeholder="e.g. GIT Module 1" value={moduleName} onChange={e=>setModuleName(e.target.value)} style={{marginTop:8}}/>)}
+
+      <div style={{fontSize:12,color:"#6B7280",marginTop:12,marginBottom:8}}>
+        💡 <strong>Need to convert PDF/Image to CSV?</strong><br/>
+        Use: ChatGPT, Gemini, or Claude<br/>
+        <span style={{fontSize:11,opacity:.8}}>Upload image and ask: "Convert this timetable to CSV format with columns: Subject, Date, Start Time, End Time, Code"</span>
+      </div>
+
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {["file","paste"].map(m=>(
+          <button key={m} className="btn" onClick={()=>setMode(m)} 
+            style={{flex:1,padding:"9px 0",background:mode===m?"#6C63FF":"#F3F4F6",color:mode===m?"#fff":"#6B7280",fontSize:13}}>
+            {m==="file"?"📂 File":"📋 Paste"}
+          </button>
+        ))}
+      </div>
+
+      {mode==="file"
+        ?<label style={{display:"block",padding:24,border:"2px dashed #D1D5DB",borderRadius:14,textAlign:"center",cursor:"pointer",color:"#6B7280",fontSize:13}}>
+          <div style={{fontSize:30,marginBottom:8}}>📂</div>Click to upload CSV or TSV
+          <input type="file" accept=".csv,.tsv,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>onImport(ev.target.result,moduleName||"Import "+new Date().toLocaleDateString());r.readAsText(f);}}/>
+        </label>
+        :<><textarea rows={6} value={text} onChange={e=>setText(e.target.value)} placeholder="Paste CSV/TSV…" style={{fontFamily:"monospace",fontSize:12,marginBottom:10}}/>
+        <button className="btn" onClick={()=>onImport(text,moduleName||"Import "+new Date().toLocaleDateString())} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15}}>Import</button>
+        </>
+      }
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─── ADD MODULE SHEET ──────────────────────────────────
+function AddModuleSheet({onSave,onClose}){
+  const[name,setName]=useState("");
+  return(
+    <div>
+      <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>New Module</div>
+      <label>Module Name *</label>
+      <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. GIT Module, Paediatrics, etc."/>
+      <button className="btn" onClick={()=>{if(!name)return;onSave({name});}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:18}}>Create</button>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─── ADD SUBJECT SHEET ─────────────────────────────────
+function AddSubSheet({onSave,onClose}){
+  const[form,setForm]=useState({name:"",color:"#6C63FF"});
+  const COLORS=["#6C63FF","#FF6B6B","#4ECDC4","#FF8B5E","#E84393","#9B59B6","#F3722C","#2EC4B6","#43AA8B","#277DA1"];
+  return(
+    <div>
+      <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Add Department</div>
+      <label>Name *</label><input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Medicine"/>
+      <label>Colour</label>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6,marginBottom:18}}>
+        {COLORS.map(c=>(
+          <div key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:32,height:32,borderRadius:9,background:c,cursor:"pointer",border:form.color===c?"3px solid #1F2937":"3px solid transparent"}}/>
+        ))}
+      </div>
+      <button className="btn" onClick={()=>{if(!form.name)return;onSave(form);}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15}}>Add</button>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─── ADD LECTURE SHEET ────────────────────────────────
+function AddLecSheet({subjects,currentModuleId,onSave,onClose}){
+  const[form,setForm]=useState({subjectId:"",topic:"",date:todayISO(),start:"08:00",end:"08:45"});
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  return(
+    <div>
+      <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Add Lecture</div>
+      <label>Department *</label>
+      <select value={form.subjectId} onChange={e=>set("subjectId",Number(e.target.value))}>
+        <option value="">Select…</option>{subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+      </select>
+      <label>Topic *</label><input value={form.topic} onChange={e=>set("topic",e.target.value)} placeholder="e.g. Acute Gastritis"/>
+      <label>Date *</label><input type="date" value={form.date} onChange={e=>set("date",e.target.value)}/>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+        <div><label>Start</label><input type="time" value={form.start} onChange={e=>set("start",e.target.value)}/></div>
+        <div><label>End</label><input type="time" value={form.end} onChange={e=>set("end",e.target.value)}/></div>
+      </div>
+      <button className="btn" onClick={()=>{if(!form.subjectId||!form.topic||!form.date)return;onSave(form);}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:18}}>Add</button>
+      <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+    </div>
+  );
+}
+
+// ─── CALENDAR TAB ────────────────────────────────────────
+function CalTab({calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att,setDayOpen}){
+  const today=todayISO();
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const firstDay=new Date(calYear,calMonth,1).getDay();
+  const monthLabel=new Date(calYear,calMonth,1).toLocaleDateString("en-IN",{month:"long",year:"numeric"});
+  const prevMonth=()=>{if(calMonth===0){setCalYear(y=>y-1);setCalMonth(11);}else setCalMonth(m=>m-1);};
+  const nextMonth=()=>{if(calMonth===11){setCalYear(y=>y+1);setCalMonth(0);}else setCalMonth(m=>m+1);};
+
+  const totalCells=firstDay+daysInMonth;
+  const weeks=[];
+  for(let w=0;w<Math.ceil(totalCells/7);w++){
+    const week=[];
+    for(let d=0;d<7;d++){
+      const cellIdx=w*7+d;
+      const day=cellIdx-firstDay+1;
+      week.push(day>=1&&day<=daysInMonth?day:null);
+    }
+    weeks.push(week);
+  }
+
+  return(
+    <div className="slide" style={{paddingTop:18}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"0 2px"}}>
+        <button className="btn" onClick={prevMonth} style={{padding:"6px 14px",background:"#fff",fontSize:14,color:"#374151",boxShadow:"0 1px 6px #0001",borderRadius:10}}>‹ Prev</button>
+        <div style={{fontWeight:800,fontSize:16,color:"#1F2937"}}>● {monthLabel}</div>
+        <button className="btn" onClick={nextMonth} style={{padding:"6px 14px",background:"#fff",fontSize:14,color:"#374151",boxShadow:"0 1px 6px #0001",borderRadius:10}}>Next ›</button>
+      </div>
+
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10,padding:"0 2px"}}>
+        {subjects.map(s=>(
+          <div key={s.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#6B7280",fontWeight:500}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:s.color}}/>
+            {s.name}
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4,padding:"0 2px"}}>
+        {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=>(
+          <div key={d} style={{textAlign:"center",fontSize:9,fontWeight:700,color:"#9CA3AF",padding:"4px 0",background:"#fff",borderRadius:8}}>{d}</div>
+        ))}
+      </div>
+
+      {weeks.map((week,wi)=>(
+        <div key={wi} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3,padding:"0 2px"}}>
+          {week.map((day,di)=>{
+            if(!day) return <div key={di}/>;
+            const iso=`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+            const lecs=lecsOnDate(iso);
+            const isToday=iso===today;
+            const hasLec=lecs.length>0;
+
+            const statuses=lecs.map(l=>att[l.id]).filter(Boolean);
+            const allAtt=hasLec&&lecs.every(l=>att[l.id]==="attended");
+            const allMiss=hasLec&&lecs.every(l=>att[l.id]==="missed");
+            const anyMiss=statuses.includes("missed");
+
+            let cellBg="#fff";
+            if(allAtt) cellBg="#DCFCE7";
+            else if(allMiss) cellBg="#FEE2E2";
+            else if(anyMiss) cellBg="#FEF9C3";
+
+            return(
+              <div key={di} onClick={()=>{if(hasLec)setDayOpen(iso);}}
+                style={{background:cellBg,borderRadius:10,border:isToday?"2px solid #6C63FF":"2px solid #E5E7EB",cursor:hasLec?"pointer":"default",minHeight:hasLec?90:60,
+                  display:"flex",flexDirection:"column",overflow:"hidden",transition:"background .2s",boxShadow:isToday?"0 0 0 2px #6C63FF22":"none"}}>
+                <div style={{display:"flex",alignItems:"center",gap:2,padding:"4px 4px 2px"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:"#9CA3AF"}}>{String(day).padStart(2,"0")}</span>
+                  <span style={{fontSize:8,fontWeight:600,color:"#9CA3AF"}}>{["SU","MO","TU","WE","TH","FR","SA"][di]}</span>
+                </div>
+                <div style={{flex:1,display:"flex",flexDirection:"column",gap:2,padding:"0 3px 4px"}}>
+                  {lecs.map(l=>{
+                    const sub=subjects.find(s=>s.id===l.subjectId);
+                    const col=sub?.color||"#6C63FF";
+                    const status=att[l.id];
+                    let lBg="#F9FAFB";
+                    if(status==="attended") lBg="#DCFCE7";
+                    else if(status==="missed") lBg="#FEE2E2";
+                    else if(status==="cancelled") lBg="#E5E7EB";
+                    return(
+                      <div key={l.id} style={{display:"flex",borderRadius:5,overflow:"hidden",background:lBg}}>
+                        <div style={{width:3,background:col,flexShrink:0}}/>
+                        <div style={{flex:1,padding:"2px 3px"}}>
+                          <div style={{fontSize:7,fontWeight:700,color:col,letterSpacing:.2,lineHeight:1}}>{l.isAssessment?"📝 TEST":sub?.name?.slice(0,4)||"—"}}</div>
+                          <div style={{fontSize:7,fontWeight:600,color:"#374151",lineHeight:1.2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{l.isAssessment?"Class Test":l.topic}</div>
+                          {!l.isAssessment&&l.gitNum&&<div style={{fontSize:6,color:"#9CA3AF",marginTop:1}}>#{l.gitNum}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── ATTENDANCE TAB ──────────────────────────────────────
+function AttTab({subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecsOnDate,currentModuleId}){
   const[expanded,setExpanded]=useState(null);
   let tot=0,atd=0;subjects.forEach(s=>{const st=subStats(s.id);tot+=st.total;atd+=st.attended;});
   const ovPct=pct(atd,tot);
 
   return(
     <div className="slide">
-      {/* Overall ring */}
       <div className="card" style={{padding:18,marginTop:18,display:"flex",gap:14,alignItems:"center",marginBottom:14}}>
         <div style={{position:"relative",width:88,height:88,flexShrink:0}}>
           <Ring value={ovPct} target={target} size={88} stroke={9}/>
@@ -577,25 +733,25 @@ function AttTab({subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecs
           <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>Overall Attendance</div>
           <div style={{color:"#6B7280",fontSize:13,marginBottom:8}}>{atd} of {tot} classes</div>
           <div style={{fontSize:13,fontWeight:700,color:ovPct>=target?"#2DB8AB":"#EF4444",marginBottom:10}}>
-            {ovPct>=target?`✅ Can skip ${canSkip(atd,tot,target)} more`:`⚠️ Need ${needMore(atd,tot,target)} more for ${target}%`}
+            {ovPct>=target?`✅ Can skip ${canSkip(atd,tot,target)} more`:`⚠️ Need ${needMore(atd,tot,target)} more`}
           </div>
           <div style={{display:"flex",gap:6}}>
-            {[75,80,85].map(t=><button key={t} className="btn" onClick={()=>setTarget(t)}
-              style={{padding:"4px 12px",fontSize:12,background:target===t?"#6C63FF":"#F3F4F6",color:target===t?"#fff":"#6B7280",borderRadius:9}}>{t}%</button>)}
+            {[75,80,85].map(t=>(
+              <button key={t} className="btn" onClick={()=>setTarget(t)}
+                style={{padding:"4px 12px",fontSize:12,background:target===t?"#6C63FF":"#F3F4F6",color:target===t?"#fff":"#6B7280",borderRadius:9}}>{t}%</button>
+            ))}
           </div>
         </div>
       </div>
 
-      {subjects.length===0&&<div className="card" style={{padding:32,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:32,marginBottom:8}}>📊</div>Import your timetable to begin</div>}
+      {subjects.length===0&&<div className="card" style={{padding:32,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:32,marginBottom:8}}>📊</div>No subjects yet</div>}
 
       {subjects.map(sub=>{
         const st=subStats(sub.id);
         const isExp=expanded===sub.id;
-        const subLecs=lectures.filter(l=>l.subjectId===sub.id&&l.date&&att[l.id]).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
 
         return(
           <div key={sub.id} className="card" style={{marginBottom:12,overflow:"hidden"}}>
-            {/* Summary row */}
             <div style={{padding:"15px 15px 12px",cursor:"pointer"}} onClick={()=>setExpanded(isExp?null:sub.id)}>
               <div style={{display:"flex",alignItems:"center",gap:12}}>
                 <div style={{position:"relative",width:64,height:64,flexShrink:0}}>
@@ -614,32 +770,6 @@ function AttTab({subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecs
                 <span style={{color:"#D1D5DB",fontSize:14}}>{isExp?"▲":"▼"}</span>
               </div>
             </div>
-
-            {/* Expanded: mini subject calendar + recent records */}
-            {isExp&&(
-              <div style={{borderTop:"1px solid #F5F5F5"}}>
-                {/* Subject mini-calendar */}
-                <SubjectCalendar sub={sub} lectures={lectures} att={att} lecsOnDate={lecsOnDate} calYear={calYear} calMonth={calMonth} setCalYear={setCalYear} setCalMonth={setCalMonth} setLecOpen={setLecOpen}/>
-
-                {/* Recent records */}
-                <div style={{padding:"10px 15px 14px"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:"#9CA3AF",marginBottom:8,letterSpacing:.5}}>RECENT RECORDS</div>
-                  {subLecs.length===0
-                    ?<div style={{color:"#9CA3AF",fontSize:13}}>No marked records yet</div>
-                    :subLecs.map(l=>{const sm=STATUS[att[l.id]];return(
-                      <div key={l.id} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 0",borderBottom:"1px solid #F9FAFB",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
-                        <span style={{fontSize:16}}>{sm.icon}</span>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
-                          <div style={{fontSize:11,color:"#9CA3AF"}}>{dispDate(l.date)} · <span style={{color:sm.fg}}>{sm.label}</span></div>
-                        </div>
-                        <span style={{fontSize:11,color:"#9CA3AF"}}>Edit ›</span>
-                      </div>
-                    );})
-                  }
-                </div>
-              </div>
-            )}
           </div>
         );
       })}
@@ -647,86 +777,8 @@ function AttTab({subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecs
   );
 }
 
-// ─── SUBJECT MINI-CALENDAR ────────────────────────────────────────────────────
-// Shows only lectures for this one subject, colored by attendance status
-function SubjectCalendar({sub,lectures,att,lecsOnDate,calYear,calMonth,setCalYear,setCalMonth,setLecOpen}){
-  const [yr,setYr]=useState(calYear);
-  const [mo,setMo]=useState(calMonth);
-  const daysInMonth=new Date(yr,mo+1,0).getDate();
-  const firstDay=new Date(yr,mo,1).getDay();
-  const monthLabel=new Date(yr,mo,1).toLocaleDateString("en-IN",{month:"short",year:"numeric"});
-  const prevMo=()=>{if(mo===0){setYr(y=>y-1);setMo(11);}else setMo(m=>m-1);};
-  const nextMo=()=>{if(mo===11){setYr(y=>y+1);setMo(0);}else setMo(m=>m+1);};
-
-  // Only lectures for this subject
-  const subLecsByDate={};
-  lectures.filter(l=>l.subjectId===sub.id&&l.date).forEach(l=>{
-    if(!subLecsByDate[l.date]) subLecsByDate[l.date]=[];
-    subLecsByDate[l.date].push(l);
-  });
-
-  return(
-    <div style={{padding:"12px 15px 0",borderBottom:"1px solid #F5F5F5"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <button className="btn" onClick={prevMo} style={{padding:"4px 10px",background:"#F3F4F6",color:"#374151",fontSize:12}}>‹</button>
-        <div style={{fontSize:12,fontWeight:700,color:"#374151"}}>{monthLabel} — {sub.name}</div>
-        <button className="btn" onClick={nextMo} style={{padding:"4px 10px",background:"#F3F4F6",color:"#374151",fontSize:12}}>›</button>
-      </div>
-      {/* Day labels */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:3}}>
-        {["S","M","T","W","T","F","S"].map((d,i)=>(
-          <div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:"#B0B7C3"}}>{d}</div>
-        ))}
-      </div>
-      {/* Cells */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:12}}>
-        {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
-        {Array.from({length:daysInMonth}).map((_,i)=>{
-          const day=i+1;
-          const iso=`${yr}-${String(mo+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-          const dayLecs=subLecsByDate[iso]||[];
-          const hasLec=dayLecs.length>0;
-          const isToday=iso===todayISO();
-
-          // Determine grid fill
-          let bg="#F9FAFB",textCol="#9CA3AF";
-          if(hasLec){
-            const statuses=dayLecs.map(l=>att[l.id]).filter(Boolean);
-            if(statuses.length===0){bg="#EEF0FF";textCol="#6C63FF";} // scheduled, unmarked
-            else if(statuses.every(s=>s==="attended")){bg="#22C55E";textCol="#fff";}
-            else if(statuses.every(s=>s==="missed")){bg="#EF4444";textCol="#fff";}
-            else if(statuses.every(s=>s==="cancelled")){bg="#374151";textCol="#fff";}
-            else if(statuses.every(s=>s==="holiday")){bg="#F59E0B";textCol="#fff";}
-            else{bg="#FEF9C3";textCol="#92400E";} // mixed
-          }
-
-          return(
-            <div key={day} onClick={()=>{ if(hasLec&&dayLecs[0]) setLecOpen(dayLecs[0]); }}
-              style={{height:30,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",
-                background:bg,cursor:hasLec?"pointer":"default",
-                border:isToday?`2px solid ${sub.color}`:"2px solid transparent",
-                fontSize:11,fontWeight:hasLec?700:400,color:textCol,
-                transition:"background .2s"}}>
-              {day}
-            </div>
-          );
-        })}
-      </div>
-      {/* Legend for this calendar */}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingBottom:10}}>
-        {[["#22C55E","Attended"],["#EF4444","Missed"],["#374151","Cancelled"],["#F59E0B","Holiday"],["#EEF0FF","Scheduled"]].map(([c,l])=>(
-          <div key={l} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6B7280"}}>
-            <div style={{width:10,height:10,borderRadius:3,background:c}}/>
-            {l}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── SUBJECTS TAB ─────────────────────────────────────────────────────────────
-function SubTab({subjects,lectures,setLectures,subStats,target,deleteSub,setAddSubOpen,setAddLecOpen,att,setLecOpen}){
+// ─── SUBJECTS TAB ────────────────────────────────────────
+function SubTab({subjects,lectures,subStats,target,deleteSub,setAddSubOpen,setAddLecOpen,att,setLecOpen,getNeedMoreLectures,setNeedMoreOpen,currentModuleId}){
   return(
     <div className="slide">
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:18,marginBottom:14}}>
@@ -736,31 +788,38 @@ function SubTab({subjects,lectures,setLectures,subStats,target,deleteSub,setAddS
           <button className="btn" onClick={()=>setAddSubOpen(true)} style={{padding:"7px 12px",background:"#6C63FF",color:"#fff",fontSize:12}}>+ Dept</button>
         </div>
       </div>
-      {subjects.length===0&&<div className="card" style={{padding:32,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:32,marginBottom:8}}>📚</div><div style={{fontWeight:700,marginBottom:6}}>No departments yet</div><div style={{fontSize:13}}>Import your timetable</div></div>}
+      {subjects.length===0&&<div className="card" style={{padding:32,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:32,marginBottom:8}}>📚</div>No departments</div>}
+
       {subjects.map(sub=>{
         const st=subStats(sub.id);
-        const sl=lectures.filter(l=>l.subjectId===sub.id&&l.date).sort((a,b)=>a.date.localeCompare(b.date));
+        const sl=lectures.filter(l=>l.subjectId===sub.id&&l.date&&l.moduleId===currentModuleId).sort((a,b)=>a.date.localeCompare(b.date));
+        const {needed}=getNeedMoreLectures(sub.id);
+
         return(
           <div key={sub.id} className="card" style={{marginBottom:12,overflow:"hidden"}}>
             <div style={{padding:"13px 15px",borderLeft:`5px solid ${sub.color}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div><div style={{fontWeight:800,fontSize:15,color:sub.color}}>{sub.name}</div>
-                  <div style={{fontSize:12,color:"#9CA3AF",marginTop:2}}>{sl.length} lectures · {st.attended}/{st.total} marked · {st.pct}%</div>
+                  <div style={{fontSize:12,color:"#9CA3AF",marginTop:2}}>{sl.length} lectures · {st.attended}/{st.total} · {st.pct}%</div>
+                  {needed>0&&<button className="btn" onClick={()=>setNeedMoreOpen(sub.id)} style={{marginTop:8,padding:"4px 10px",background:"#FEF9C3",color:"#92400E",fontSize:11}}>📋 Need {needed} more</button>}
                 </div>
-                <button className="btn" onClick={()=>deleteSub(sub.id)} style={{padding:"4px 10px",background:"#FFE8E8",color:"#EF4444",fontSize:12,flexShrink:0,marginLeft:8}}>Delete</button>
+                <button className="btn" onClick={()=>deleteSub(sub.id)} style={{padding:"4px 10px",background:"#FFE8E8",color:"#EF4444",fontSize:12,flexShrink:0}}>Delete</button>
               </div>
             </div>
             {sl.length>0&&<div style={{padding:"8px 15px 12px",borderTop:"1px solid #F9FAFB"}}>
-              {sl.map(l=>{const sm=att[l.id]?STATUS[att[l.id]]:null;return(
-                <div key={l.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #FAFAFA",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
-                  <span style={{fontSize:14}}>{sm?sm.icon:"⬜"}</span>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
-                    <div style={{fontSize:11,color:"#9CA3AF"}}>{dispDate(l.date)}{l.start?` · ${fmt12(l.start)}`:""}</div>
+              {sl.slice(0,5).map(l=>{
+                const sm=att[l.id]?STATUS[att[l.id]]:null;
+                return(
+                  <div key={l.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #FAFAFA",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
+                    <span style={{fontSize:14}}>{sm?sm.icon:"⬜"}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
+                      <div style={{fontSize:11,color:"#9CA3AF"}}>{dispDate(l.date)}</div>
+                    </div>
                   </div>
-                  {l.gitNum&&<span style={{fontSize:10,color:"#9CA3AF",flexShrink:0}}>#{l.gitNum}</span>}
-                </div>
-              );})}
+                );
+              })}
+              {sl.length>5&&<div style={{fontSize:11,color:"#9CA3AF",padding:"5px 0"}}>+{sl.length-5} more</div>}
             </div>}
           </div>
         );
@@ -769,7 +828,7 @@ function SubTab({subjects,lectures,setLectures,subStats,target,deleteSub,setAddS
   );
 }
 
-// ─── BUNK TAB ─────────────────────────────────────────────────────────────────
+// ─── BUNK TAB ────────────────────────────────────────────
 function BunkTab({subjects,subStats,target}){
   const[n,setN]=useState(1);
   return(
@@ -816,66 +875,4 @@ function BunkTab({subjects,subStats,target}){
       })}
     </div>
   );
-}
-
-// ─── ADD / IMPORT SHEETS ──────────────────────────────────────────────────────
-function AddSubSheet({onSave,onClose}){
-  const[form,setForm]=useState({name:"",color:"#6C63FF"});
-  const COLORS=["#6C63FF","#FF6B6B","#4ECDC4","#FF8B5E","#E84393","#9B59B6","#F3722C","#2EC4B6","#43AA8B","#277DA1"];
-  return(<div>
-    <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Add Department</div>
-    <label>Name *</label><input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Medicine"/>
-    <label>Colour</label>
-    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6,marginBottom:18}}>
-      {COLORS.map(c=><div key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:32,height:32,borderRadius:9,background:c,cursor:"pointer",border:form.color===c?"3px solid #1F2937":"3px solid transparent"}}/>)}
-    </div>
-    <button className="btn" onClick={()=>{if(!form.name)return;onSave(form);}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15}}>Add</button>
-    <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
-  </div>);
-}
-
-function AddLecSheet({subjects,onSave,onClose}){
-  const[form,setForm]=useState({subjectId:"",topic:"",date:todayISO(),start:"08:00",end:"08:45"});
-  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
-  return(<div>
-    <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Add Lecture</div>
-    <label>Department *</label>
-    <select value={form.subjectId} onChange={e=>set("subjectId",Number(e.target.value))}>
-      <option value="">Select…</option>{subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-    </select>
-    <label>Topic *</label><input value={form.topic} onChange={e=>set("topic",e.target.value)} placeholder="e.g. Acute Gastritis"/>
-    <label>Date *</label><input type="date" value={form.date} onChange={e=>set("date",e.target.value)}/>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-      <div><label>Start</label><input type="time" value={form.start} onChange={e=>set("start",e.target.value)}/></div>
-      <div><label>End</label><input type="time" value={form.end} onChange={e=>set("end",e.target.value)}/></div>
-    </div>
-    <button className="btn" onClick={()=>{if(!form.subjectId||!form.topic||!form.date)return;onSave(form);}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:18}}>Add</button>
-    <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
-  </div>);
-}
-
-function ImportSheet({onImport,onClose}){
-  const[mode,setMode]=useState("file");const[text,setText]=useState("");
-  return(<div>
-    <div style={{fontWeight:800,fontSize:18,marginBottom:6}}>Import Timetable</div>
-    <div style={{color:"#6B7280",fontSize:13,marginBottom:16,lineHeight:1.55}}>
-      Upload CSV/TSV. Columns: <strong>Subject</strong> (topic), <strong>Day</strong> (date), <strong>Start Time</strong>, <strong>End Time</strong>, <strong>Teacher/Code</strong> (e.g. Surg43/GIT25). Class Assessments are included and count toward dept attendance. Span artifacts auto-cleaned.
-    </div>
-    <div style={{display:"flex",gap:8,marginBottom:14}}>
-      {["file","paste"].map(m=><button key={m} className="btn" onClick={()=>setMode(m)} style={{flex:1,padding:"9px 0",background:mode===m?"#6C63FF":"#F3F4F6",color:mode===m?"#fff":"#6B7280",fontSize:13}}>{m==="file"?"📁 Upload File":"✏️ Paste Text"}</button>)}
-    </div>
-    <div style={{background:"#F9FAFB",borderRadius:11,padding:"10px 12px",fontFamily:"monospace",fontSize:10,color:"#374151",marginBottom:14,lineHeight:1.9,overflowX:"auto"}}>
-      Subject,Day,Start Time,End Time,Teacher<br/>
-      Acute Gastritis,2026-04-28,08:45,09:30,Med50/GIT04<br/>
-      CA Esophagus,2026-05-04,08:00,08:45,Surg34/GIT09
-    </div>
-    {mode==="file"
-      ?<label style={{display:"block",padding:24,border:"2px dashed #D1D5DB",borderRadius:14,textAlign:"center",cursor:"pointer",color:"#6B7280",fontSize:13}}>
-        <div style={{fontSize:30,marginBottom:8}}>📂</div>Click to upload CSV or TSV
-        <input type="file" accept=".csv,.tsv,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>onImport(ev.target.result);r.readAsText(f);}}/>
-      </label>
-      :<><textarea rows={6} value={text} onChange={e=>setText(e.target.value)} placeholder="Paste CSV/TSV…" style={{fontFamily:"monospace",fontSize:12}}/><button className="btn" onClick={()=>onImport(text)} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:10}}>Import</button></>
-    }
-    <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
-  </div>);
 }
