@@ -322,4 +322,560 @@ function CalTab({calYear,calMonth,setCalYear,setCalMonth,lecsOnDate,subjects,att
     for(let d=0;d<7;d++){
       const cellIdx=w*7+d;
       const day=cellIdx-firstDay+1;
-      week.push(day>=1&&day<=daysInMonth?day:null
+      week.push(day>=1&&day<=daysInMonth?day:null);
+    }
+    weeks.push(week);
+  }
+
+  return(
+    <div className="slide" style={{paddingTop:18}}>
+      {/* Month nav */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,padding:"0 2px"}}>
+        <button className="btn" onClick={prevMonth} style={{padding:"6px 14px",background:"#fff",fontSize:14,color:"#374151",boxShadow:"0 1px 6px #0001",borderRadius:10}}>‹ Prev</button>
+        <div style={{fontWeight:800,fontSize:16,color:"#1F2937"}}>● {monthLabel}</div>
+        <button className="btn" onClick={nextMonth} style={{padding:"6px 14px",background:"#fff",fontSize:14,color:"#374151",boxShadow:"0 1px 6px #0001",borderRadius:10}}>Next ›</button>
+      </div>
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:10,padding:"0 2px"}}>
+        {subjects.map(s=>(
+          <div key={s.id} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#6B7280",fontWeight:500}}>
+            <div style={{width:8,height:8,borderRadius:"50%",background:s.color}}/>
+            {s.name}
+          </div>
+        ))}
+      </div>
+
+      {/* Day labels row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:4,padding:"0 2px"}}>
+        {["SUN","MON","TUE","WED","THU","FRI","SAT"].map(d=>(
+          <div key={d} style={{textAlign:"center",fontSize:9,fontWeight:700,color:"#9CA3AF",padding:"4px 0",background:"#fff",borderRadius:8}}>{d}</div>
+        ))}
+      </div>
+
+      {/* Week rows */}
+      {weeks.map((week,wi)=>(
+        <div key={wi} style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,marginBottom:3,padding:"0 2px"}}>
+          {week.map((day,di)=>{
+            if(!day) return <div key={di}/>;
+            const iso=`${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+            const lecs=lecsOnDate(iso);
+            const isToday=iso===today;
+            const hasLec=lecs.length>0;
+
+            // Determine fill color based on attendance
+            const statuses=lecs.map(l=>att[l.id]).filter(Boolean);
+            const allAtt=hasLec&&lecs.every(l=>att[l.id]==="attended");
+            const allMiss=hasLec&&lecs.every(l=>att[l.id]==="missed");
+            const allCanc=hasLec&&lecs.every(l=>att[l.id]==="cancelled");
+            const anyMiss=statuses.includes("missed");
+            const anyAtt=statuses.includes("attended");
+            const fullyMarked=hasLec&&lecs.every(l=>att[l.id]);
+
+            let cellBg="#fff";
+            if(allAtt) cellBg="#DCFCE7";
+            else if(allMiss) cellBg="#FEE2E2";
+            else if(allCanc) cellBg="#F3F4F6";
+            else if(anyMiss) cellBg="#FEF9C3"; // mixed
+
+            return(
+              <div key={di} onClick={()=>{if(hasLec)setDayOpen(iso);}}
+                style={{
+                  background:cellBg,
+                  borderRadius:10,
+                  border:isToday?"2px solid #6C63FF":"2px solid #E5E7EB",
+                  cursor:hasLec?"pointer":"default",
+                  minHeight:hasLec?90:60,
+                  display:"flex",flexDirection:"column",
+                  overflow:"hidden",
+                  transition:"background .2s",
+                  boxShadow:isToday?"0 0 0 2px #6C63FF22":"none",
+                }}>
+                {/* Day number header */}
+                <div style={{display:"flex",alignItems:"center",gap:2,padding:"4px 4px 2px"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:"#9CA3AF"}}>{String(day).padStart(2,"0")}</span>
+                  <span style={{fontSize:8,fontWeight:600,color:"#9CA3AF"}}>
+                    {["SU","MO","TU","WE","TH","FR","SA"][di]}
+                  </span>
+                </div>
+
+                {/* Lecture cards inside day — each with colored left bar like Image 1 */}
+                <div style={{flex:1,display:"flex",flexDirection:"column",gap:2,padding:"0 3px 4px"}}>
+                  {lecs.map(l=>{
+                    const sub=subjects.find(s=>s.id===l.subjectId);
+                    const col=sub?.color||"#6C63FF";
+                    const status=att[l.id];
+                    const sm=status?STATUS[status]:null;
+                    // fill color for this specific lecture
+                    let lBg="#F9FAFB";
+                    if(status==="attended") lBg="#DCFCE7";
+                    else if(status==="missed") lBg="#FEE2E2";
+                    else if(status==="cancelled") lBg="#E5E7EB";
+                    else if(status==="holiday") lBg="#FEF9C3";
+
+                    return(
+                      <div key={l.id} style={{display:"flex",borderRadius:5,overflow:"hidden",background:lBg}}>
+                        <div style={{width:3,background:col,flexShrink:0}}/>
+                        <div style={{flex:1,padding:"2px 3px"}}>
+                          <div style={{fontSize:7,fontWeight:700,color:col,letterSpacing:.2,lineHeight:1}}>
+                            {l.isAssessment?"📝 TEST":sub?.name?.slice(0,4)||"—"}
+                          </div>
+                          <div style={{fontSize:7,fontWeight:600,color:"#374151",lineHeight:1.2,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
+                            {l.isAssessment?"Class Test":l.topic}
+                          </div>
+                          {!l.isAssessment&&l.gitNum&&<div style={{fontSize:6,color:"#9CA3AF",marginTop:1}}>#{l.gitNum}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Holiday label */}
+                  {!hasLec && day && (
+                    <div style={{fontSize:7,color:"#D1D5DB",textAlign:"center",marginTop:4}}>—</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      {/* Today section */}
+      <div style={{fontWeight:800,fontSize:14,margin:"16px 0 8px 2px",color:"#1F2937"}}>
+        Today · {new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"short"})}
+      </div>
+      {todayLecs.length===0
+        ?<div className="card" style={{padding:26,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:30,marginBottom:5}}>🎉</div>No classes today</div>
+        :todayLecs.map(l=><MiniCard key={l.id} lec={l} subjects={subjects} att={att} onClick={()=>setDayOpen(today)}/>)
+      }
+    </div>
+  );
+}
+
+// Mini card below calendar
+function MiniCard({lec,subjects,att,onClick}){
+  const sub=subjects.find(s=>s.id===lec.subjectId);
+  const col=sub?.color||"#6C63FF";
+  const sm=att[lec.id]?STATUS[att[lec.id]]:null;
+  return(
+    <div className="card" style={{marginBottom:9,overflow:"hidden",cursor:"pointer",display:"flex"}} onClick={onClick}>
+      <div style={{width:5,background:col,flexShrink:0}}/>
+      <div style={{flex:1,padding:"11px 13px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:11,fontWeight:700,color:col,marginBottom:2}}>{sub?.name}</div>
+            <div style={{fontSize:13,fontWeight:700,color:"#1F2937",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lec.topic}</div>
+            {lec.start&&<div style={{fontSize:11,color:"#9CA3AF",marginTop:2}}>{fmt12(lec.start)}{lec.end?` – ${fmt12(lec.end)}`:""}</div>}
+          </div>
+          {sm?<span className="chip" style={{background:sm.bg,color:sm.fg,flexShrink:0}}>{sm.icon}</span>
+            :<span style={{fontSize:11,color:"#D1D5DB",flexShrink:0}}>—</span>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── DAY SHEET ────────────────────────────────────────────────────────────────
+function DaySheet({date,lecsOnDate,subjects,att,onSelectLec,onClose}){
+  const lecs=lecsOnDate(date);
+  const d=new Date(date+"T12:00:00");
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:20}}>{d.toLocaleDateString("en-IN",{weekday:"long"})}</div>
+          <div style={{color:"#9CA3AF",fontSize:13}}>{dispDate(date)} · {lecs.length} lecture{lecs.length!==1?"s":""}</div>
+        </div>
+        <button className="btn" onClick={onClose} style={{padding:"7px 14px",background:"#F3F4F6",color:"#6B7280",fontSize:13}}>✕ Close</button>
+      </div>
+      {lecs.length===0
+        ?<div style={{textAlign:"center",color:"#9CA3AF",padding:32}}><div style={{fontSize:32,marginBottom:8}}>😴</div>No lectures</div>
+        :lecs.map(l=>{
+          const sub=subjects.find(s=>s.id===l.subjectId),col=sub?.color||"#6C63FF",sm=att[l.id]?STATUS[att[l.id]]:null;
+          return(
+            <div key={l.id} className="card" style={{marginBottom:11,overflow:"hidden",cursor:"pointer",display:"flex"}} onClick={()=>onSelectLec(l)}>
+              <div style={{width:5,background:col,flexShrink:0}}/>
+              <div style={{flex:1,padding:"13px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}>
+                      <span className="chip" style={{background:col+"20",color:col}}>{sub?.name||"—"}</span>
+                      {l.isAssessment&&<span className="chip" style={{background:"#FEF9C3",color:"#92400E"}}>📝 Assessment</span>}
+                      {!l.isAssessment&&l.gitNum&&<span style={{fontSize:10,color:"#9CA3AF"}}>Lecture #{l.gitNum}</span>}
+                    </div>
+                    <div style={{fontWeight:700,fontSize:14,color:"#1F2937",lineHeight:1.35,marginBottom:4}}>{l.topic}</div>
+                    {l.start&&<div style={{fontSize:12,color:"#6B7280"}}>⏰ {fmt12(l.start)}{l.end?` – ${fmt12(l.end)}`:""}</div>}
+                  </div>
+                  <div style={{flexShrink:0}}>
+                    {sm?<span className="chip" style={{background:sm.bg,color:sm.fg}}>{sm.icon} {sm.label}</span>
+                      :<span className="chip" style={{background:"#F3F4F6",color:"#9CA3AF"}}>Tap to mark</span>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+}
+
+// ─── LECTURE MARK SHEET ───────────────────────────────────────────────────────
+function LecSheet({lec,subjects,att,mark,clearMark,onClose}){
+  const sub=subjects.find(s=>s.id===lec.subjectId),current=att[lec.id];
+  return(
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}}>
+        <div style={{flex:1,minWidth:0,paddingRight:10}}>
+          {sub&&<span className="chip" style={{background:sub.color+"22",color:sub.color,marginBottom:10,display:"inline-flex"}}>{sub.name}</span>}
+          <div style={{fontWeight:800,fontSize:18,color:"#1F2937",lineHeight:1.3,marginTop:6}}>{lec.topic}</div>
+        </div>
+        <button className="btn" onClick={onClose} style={{padding:"7px 13px",background:"#F3F4F6",color:"#6B7280",fontSize:13,flexShrink:0}}>✕</button>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:20}}>
+        {[["📅 Date",lec.date?dispDate(lec.date):"—"],["⏰ Time",lec.start?`${fmt12(lec.start)}${lec.end?` – ${fmt12(lec.end)}`:""}`:"—"],
+          ["📖 Type",lec.isAssessment?"📝 Class Assessment":lec.gitNum?`Lecture ${lec.gitNum}`:"Lecture"],
+          ["🏥 Dept",sub?.name||"—"]].map(([lb,v])=>(
+          <div key={lb} style={{background:"#F9FAFB",borderRadius:12,padding:"10px 12px"}}>
+            <div style={{fontSize:11,color:"#9CA3AF",marginBottom:3}}>{lb}</div>
+            <div style={{fontWeight:700,fontSize:13,color:"#1F2937"}}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{fontWeight:800,fontSize:15,marginBottom:12}}>Mark Attendance</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+        {Object.entries(STATUS).map(([status,{icon,label,bg,fg,fill}])=>(
+          <button key={status} className="btn" onClick={()=>mark(lec.id,status)}
+            style={{padding:"15px 10px",background:current===status?fill:bg,color:current===status?"#fff":fg,
+              border:`2px solid ${current===status?fill:fg+"30"}`,fontSize:14,
+              display:"flex",alignItems:"center",justifyContent:"center",gap:8,borderRadius:14}}>
+            {icon} {label}
+          </button>
+        ))}
+      </div>
+      {current&&<button className="btn" onClick={()=>clearMark(lec.id)} style={{width:"100%",padding:12,background:"#F3F4F6",color:"#9CA3AF",fontSize:13,marginTop:10}}>Clear Mark</button>}
+    </div>
+  );
+}
+
+// ─── ATTENDANCE TAB — with individual subject mini-calendars ─────────────────
+function AttTab({subjects,subStats,target,setTarget,lectures,att,setLecOpen,lecsOnDate,calYear,calMonth,setCalYear,setCalMonth}){
+  const[expanded,setExpanded]=useState(null);
+  let tot=0,atd=0;subjects.forEach(s=>{const st=subStats(s.id);tot+=st.total;atd+=st.attended;});
+  const ovPct=pct(atd,tot);
+
+  return(
+    <div className="slide">
+      {/* Overall ring */}
+      <div className="card" style={{padding:18,marginTop:18,display:"flex",gap:14,alignItems:"center",marginBottom:14}}>
+        <div style={{position:"relative",width:88,height:88,flexShrink:0}}>
+          <Ring value={ovPct} target={target} size={88} stroke={9}/>
+          <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{fontSize:21,fontWeight:800,color:ovPct>=target?"#6C63FF":"#EF4444"}}>{ovPct}%</div>
+          </div>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>Overall Attendance</div>
+          <div style={{color:"#6B7280",fontSize:13,marginBottom:8}}>{atd} of {tot} classes</div>
+          <div style={{fontSize:13,fontWeight:700,color:ovPct>=target?"#2DB8AB":"#EF4444",marginBottom:10}}>
+            {ovPct>=target?`✅ Can skip ${canSkip(atd,tot,target)} more`:`⚠️ Need ${needMore(atd,tot,target)} more for ${target}%`}
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            {[75,80,85].map(t=><button key={t} className="btn" onClick={()=>setTarget(t)}
+              style={{padding:"4px 12px",fontSize:12,background:target===t?"#6C63FF":"#F3F4F6",color:target===t?"#fff":"#6B7280",borderRadius:9}}>{t}%</button>)}
+          </div>
+        </div>
+      </div>
+
+      {subjects.length===0&&<div className="card" style={{padding:32,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:32,marginBottom:8}}>📊</div>Import your timetable to begin</div>}
+
+      {subjects.map(sub=>{
+        const st=subStats(sub.id);
+        const isExp=expanded===sub.id;
+        const subLecs=lectures.filter(l=>l.subjectId===sub.id&&l.date&&att[l.id]).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+
+        return(
+          <div key={sub.id} className="card" style={{marginBottom:12,overflow:"hidden"}}>
+            {/* Summary row */}
+            <div style={{padding:"15px 15px 12px",cursor:"pointer"}} onClick={()=>setExpanded(isExp?null:sub.id)}>
+              <div style={{display:"flex",alignItems:"center",gap:12}}>
+                <div style={{position:"relative",width:64,height:64,flexShrink:0}}>
+                  <Ring value={st.pct} target={target} size={64} stroke={7} color={sub.color}/>
+                  <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    <span style={{fontSize:13,fontWeight:800,color:st.pct>=target?sub.color:"#EF4444"}}>{st.pct}%</span>
+                  </div>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:800,fontSize:15,color:"#1F2937"}}>{sub.name}</div>
+                  <div style={{fontSize:12,color:"#9CA3AF",marginBottom:4}}>{st.attended}/{st.total} attended</div>
+                  <div style={{fontSize:12,fontWeight:700,color:st.pct>=target?"#2DB8AB":"#EF4444"}}>
+                    {st.pct>=target?`Safe — skip ${canSkip(st.attended,st.total,target)} more`:`Need ${needMore(st.attended,st.total,target)} more`}
+                  </div>
+                </div>
+                <span style={{color:"#D1D5DB",fontSize:14}}>{isExp?"▲":"▼"}</span>
+              </div>
+            </div>
+
+            {/* Expanded: mini subject calendar + recent records */}
+            {isExp&&(
+              <div style={{borderTop:"1px solid #F5F5F5"}}>
+                {/* Subject mini-calendar */}
+                <SubjectCalendar sub={sub} lectures={lectures} att={att} lecsOnDate={lecsOnDate} calYear={calYear} calMonth={calMonth} setCalYear={setCalYear} setCalMonth={setCalMonth} setLecOpen={setLecOpen}/>
+
+                {/* Recent records */}
+                <div style={{padding:"10px 15px 14px"}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#9CA3AF",marginBottom:8,letterSpacing:.5}}>RECENT RECORDS</div>
+                  {subLecs.length===0
+                    ?<div style={{color:"#9CA3AF",fontSize:13}}>No marked records yet</div>
+                    :subLecs.map(l=>{const sm=STATUS[att[l.id]];return(
+                      <div key={l.id} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 0",borderBottom:"1px solid #F9FAFB",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
+                        <span style={{fontSize:16}}>{sm.icon}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
+                          <div style={{fontSize:11,color:"#9CA3AF"}}>{dispDate(l.date)} · <span style={{color:sm.fg}}>{sm.label}</span></div>
+                        </div>
+                        <span style={{fontSize:11,color:"#9CA3AF"}}>Edit ›</span>
+                      </div>
+                    );})
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── SUBJECT MINI-CALENDAR ────────────────────────────────────────────────────
+// Shows only lectures for this one subject, colored by attendance status
+function SubjectCalendar({sub,lectures,att,lecsOnDate,calYear,calMonth,setCalYear,setCalMonth,setLecOpen}){
+  const [yr,setYr]=useState(calYear);
+  const [mo,setMo]=useState(calMonth);
+  const daysInMonth=new Date(yr,mo+1,0).getDate();
+  const firstDay=new Date(yr,mo,1).getDay();
+  const monthLabel=new Date(yr,mo,1).toLocaleDateString("en-IN",{month:"short",year:"numeric"});
+  const prevMo=()=>{if(mo===0){setYr(y=>y-1);setMo(11);}else setMo(m=>m-1);};
+  const nextMo=()=>{if(mo===11){setYr(y=>y+1);setMo(0);}else setMo(m=>m+1);};
+
+  // Only lectures for this subject
+  const subLecsByDate={};
+  lectures.filter(l=>l.subjectId===sub.id&&l.date).forEach(l=>{
+    if(!subLecsByDate[l.date]) subLecsByDate[l.date]=[];
+    subLecsByDate[l.date].push(l);
+  });
+
+  return(
+    <div style={{padding:"12px 15px 0",borderBottom:"1px solid #F5F5F5"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+        <button className="btn" onClick={prevMo} style={{padding:"4px 10px",background:"#F3F4F6",color:"#374151",fontSize:12}}>‹</button>
+        <div style={{fontSize:12,fontWeight:700,color:"#374151"}}>{monthLabel} — {sub.name}</div>
+        <button className="btn" onClick={nextMo} style={{padding:"4px 10px",background:"#F3F4F6",color:"#374151",fontSize:12}}>›</button>
+      </div>
+      {/* Day labels */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:3}}>
+        {["S","M","T","W","T","F","S"].map((d,i)=>(
+          <div key={i} style={{textAlign:"center",fontSize:9,fontWeight:700,color:"#B0B7C3"}}>{d}</div>
+        ))}
+      </div>
+      {/* Cells */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:12}}>
+        {Array.from({length:firstDay}).map((_,i)=><div key={"e"+i}/>)}
+        {Array.from({length:daysInMonth}).map((_,i)=>{
+          const day=i+1;
+          const iso=`${yr}-${String(mo+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+          const dayLecs=subLecsByDate[iso]||[];
+          const hasLec=dayLecs.length>0;
+          const isToday=iso===todayISO();
+
+          // Determine grid fill
+          let bg="#F9FAFB",textCol="#9CA3AF";
+          if(hasLec){
+            const statuses=dayLecs.map(l=>att[l.id]).filter(Boolean);
+            if(statuses.length===0){bg="#EEF0FF";textCol="#6C63FF";} // scheduled, unmarked
+            else if(statuses.every(s=>s==="attended")){bg="#22C55E";textCol="#fff";}
+            else if(statuses.every(s=>s==="missed")){bg="#EF4444";textCol="#fff";}
+            else if(statuses.every(s=>s==="cancelled")){bg="#374151";textCol="#fff";}
+            else if(statuses.every(s=>s==="holiday")){bg="#F59E0B";textCol="#fff";}
+            else{bg="#FEF9C3";textCol="#92400E";} // mixed
+          }
+
+          return(
+            <div key={day} onClick={()=>{ if(hasLec&&dayLecs[0]) setLecOpen(dayLecs[0]); }}
+              style={{height:30,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",
+                background:bg,cursor:hasLec?"pointer":"default",
+                border:isToday?`2px solid ${sub.color}`:"2px solid transparent",
+                fontSize:11,fontWeight:hasLec?700:400,color:textCol,
+                transition:"background .2s"}}>
+              {day}
+            </div>
+          );
+        })}
+      </div>
+      {/* Legend for this calendar */}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingBottom:10}}>
+        {[["#22C55E","Attended"],["#EF4444","Missed"],["#374151","Cancelled"],["#F59E0B","Holiday"],["#EEF0FF","Scheduled"]].map(([c,l])=>(
+          <div key={l} style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#6B7280"}}>
+            <div style={{width:10,height:10,borderRadius:3,background:c}}/>
+            {l}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── SUBJECTS TAB ─────────────────────────────────────────────────────────────
+function SubTab({subjects,lectures,setLectures,subStats,target,deleteSub,setAddSubOpen,setAddLecOpen,att,setLecOpen}){
+  return(
+    <div className="slide">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:18,marginBottom:14}}>
+        <div style={{fontWeight:800,fontSize:15}}>Departments</div>
+        <div style={{display:"flex",gap:7}}>
+          <button className="btn" onClick={()=>setAddLecOpen(true)} style={{padding:"7px 12px",background:"#4ECDC420",color:"#2DB8AB",fontSize:12}}>+ Lecture</button>
+          <button className="btn" onClick={()=>setAddSubOpen(true)} style={{padding:"7px 12px",background:"#6C63FF",color:"#fff",fontSize:12}}>+ Dept</button>
+        </div>
+      </div>
+      {subjects.length===0&&<div className="card" style={{padding:32,textAlign:"center",color:"#9CA3AF"}}><div style={{fontSize:32,marginBottom:8}}>📚</div><div style={{fontWeight:700,marginBottom:6}}>No departments yet</div><div style={{fontSize:13}}>Import your timetable</div></div>}
+      {subjects.map(sub=>{
+        const st=subStats(sub.id);
+        const sl=lectures.filter(l=>l.subjectId===sub.id&&l.date).sort((a,b)=>a.date.localeCompare(b.date));
+        return(
+          <div key={sub.id} className="card" style={{marginBottom:12,overflow:"hidden"}}>
+            <div style={{padding:"13px 15px",borderLeft:`5px solid ${sub.color}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div><div style={{fontWeight:800,fontSize:15,color:sub.color}}>{sub.name}</div>
+                  <div style={{fontSize:12,color:"#9CA3AF",marginTop:2}}>{sl.length} lectures · {st.attended}/{st.total} marked · {st.pct}%</div>
+                </div>
+                <button className="btn" onClick={()=>deleteSub(sub.id)} style={{padding:"4px 10px",background:"#FFE8E8",color:"#EF4444",fontSize:12,flexShrink:0,marginLeft:8}}>Delete</button>
+              </div>
+            </div>
+            {sl.length>0&&<div style={{padding:"8px 15px 12px",borderTop:"1px solid #F9FAFB"}}>
+              {sl.map(l=>{const sm=att[l.id]?STATUS[att[l.id]]:null;return(
+                <div key={l.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:"1px solid #FAFAFA",cursor:"pointer"}} onClick={()=>setLecOpen(l)}>
+                  <span style={{fontSize:14}}>{sm?sm.icon:"⬜"}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.topic}</div>
+                    <div style={{fontSize:11,color:"#9CA3AF"}}>{dispDate(l.date)}{l.start?` · ${fmt12(l.start)}`:""}</div>
+                  </div>
+                  {l.gitNum&&<span style={{fontSize:10,color:"#9CA3AF",flexShrink:0}}>#{l.gitNum}</span>}
+                </div>
+              );})}
+            </div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── BUNK TAB ─────────────────────────────────────────────────────────────────
+function BunkTab({subjects,subStats,target}){
+  const[n,setN]=useState(1);
+  return(
+    <div className="slide">
+      <div style={{fontWeight:800,fontSize:15,marginTop:18,marginBottom:4}}>Bunk Calculator 🧮</div>
+      <div style={{fontSize:13,color:"#9CA3AF",marginBottom:14}}>See impact of skipping lectures</div>
+      <div className="card" style={{padding:15,marginBottom:14,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{fontSize:14,fontWeight:600}}>Lectures to skip:</div>
+        <div style={{display:"flex",gap:8,alignItems:"center",marginLeft:"auto"}}>
+          <button className="btn" onClick={()=>setN(x=>Math.max(1,x-1))} style={{padding:"6px 16px",background:"#F3F4F6",color:"#374151",fontSize:18}}>−</button>
+          <span style={{fontWeight:800,fontSize:22,width:32,textAlign:"center"}}>{n}</span>
+          <button className="btn" onClick={()=>setN(x=>x+1)} style={{padding:"6px 16px",background:"#F3F4F6",color:"#374151",fontSize:18}}>+</button>
+        </div>
+      </div>
+      {subjects.length===0&&<div className="card" style={{padding:30,textAlign:"center",color:"#9CA3AF"}}>No data yet</div>}
+      {subjects.map(sub=>{
+        const st=subStats(sub.id);
+        const afterMiss=pct(st.attended,st.total+n),afterAtt=pct(st.attended+n,st.total+n);
+        const skip=canSkip(st.attended,st.total,target),safe=skip>=n;
+        return(
+          <div key={sub.id} className="card" style={{marginBottom:12,padding:15}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <div style={{width:10,height:10,borderRadius:3,background:sub.color,flexShrink:0}}/>
+              <div style={{fontWeight:800,fontSize:14}}>{sub.name}</div>
+              <span className="chip" style={{background:sub.color+"20",color:sub.color,marginLeft:"auto"}}>{st.pct}% now</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
+              <div style={{padding:"12px 10px",background:"#FEE2E2",borderRadius:12,textAlign:"center"}}>
+                <div style={{fontSize:11,color:"#EF4444",fontWeight:700,marginBottom:3}}>IF SKIP {n}</div>
+                <div style={{fontSize:24,fontWeight:800,color:afterMiss>=target?"#1F2937":"#EF4444"}}>{afterMiss}%</div>
+                <div style={{fontSize:10,color:"#9CA3AF"}}>↓{Math.max(0,st.pct-afterMiss)}%</div>
+              </div>
+              <div style={{padding:"12px 10px",background:"#DCFCE7",borderRadius:12,textAlign:"center"}}>
+                <div style={{fontSize:11,color:"#16A34A",fontWeight:700,marginBottom:3}}>IF ATTEND {n}</div>
+                <div style={{fontSize:24,fontWeight:800,color:"#1F2937"}}>{afterAtt}%</div>
+                <div style={{fontSize:10,color:"#9CA3AF"}}>↑{Math.max(0,afterAtt-st.pct)}%</div>
+              </div>
+            </div>
+            <div style={{padding:"9px 12px",borderRadius:10,fontSize:12,fontWeight:700,background:safe?"#F0FDF4":"#FFF5F5",color:safe?"#16A34A":"#DC2626"}}>
+              {safe?`✅ Safe — ${skip-n} skips remaining`:skip>0?`⚠️ Risky — only ${skip} left`:`❌ Cannot skip — at/below ${target}%`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ADD / IMPORT SHEETS ──────────────────────────────────────────────────────
+function AddSubSheet({onSave,onClose}){
+  const[form,setForm]=useState({name:"",color:"#6C63FF"});
+  const COLORS=["#6C63FF","#FF6B6B","#4ECDC4","#FF8B5E","#E84393","#9B59B6","#F3722C","#2EC4B6","#43AA8B","#277DA1"];
+  return(<div>
+    <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Add Department</div>
+    <label>Name *</label><input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Medicine"/>
+    <label>Colour</label>
+    <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:6,marginBottom:18}}>
+      {COLORS.map(c=><div key={c} onClick={()=>setForm(p=>({...p,color:c}))} style={{width:32,height:32,borderRadius:9,background:c,cursor:"pointer",border:form.color===c?"3px solid #1F2937":"3px solid transparent"}}/>)}
+    </div>
+    <button className="btn" onClick={()=>{if(!form.name)return;onSave(form);}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15}}>Add</button>
+    <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+  </div>);
+}
+
+function AddLecSheet({subjects,onSave,onClose}){
+  const[form,setForm]=useState({subjectId:"",topic:"",date:todayISO(),start:"08:00",end:"08:45"});
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  return(<div>
+    <div style={{fontWeight:800,fontSize:18,marginBottom:18}}>Add Lecture</div>
+    <label>Department *</label>
+    <select value={form.subjectId} onChange={e=>set("subjectId",Number(e.target.value))}>
+      <option value="">Select…</option>{subjects.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+    </select>
+    <label>Topic *</label><input value={form.topic} onChange={e=>set("topic",e.target.value)} placeholder="e.g. Acute Gastritis"/>
+    <label>Date *</label><input type="date" value={form.date} onChange={e=>set("date",e.target.value)}/>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+      <div><label>Start</label><input type="time" value={form.start} onChange={e=>set("start",e.target.value)}/></div>
+      <div><label>End</label><input type="time" value={form.end} onChange={e=>set("end",e.target.value)}/></div>
+    </div>
+    <button className="btn" onClick={()=>{if(!form.subjectId||!form.topic||!form.date)return;onSave(form);}} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:18}}>Add</button>
+    <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+  </div>);
+}
+
+function ImportSheet({onImport,onClose}){
+  const[mode,setMode]=useState("file");const[text,setText]=useState("");
+  return(<div>
+    <div style={{fontWeight:800,fontSize:18,marginBottom:6}}>Import Timetable</div>
+    <div style={{color:"#6B7280",fontSize:13,marginBottom:16,lineHeight:1.55}}>
+      Upload CSV/TSV. Columns: <strong>Subject</strong> (topic), <strong>Day</strong> (date), <strong>Start Time</strong>, <strong>End Time</strong>, <strong>Teacher/Code</strong> (e.g. Surg43/GIT25). Class Assessments are included and count toward dept attendance. Span artifacts auto-cleaned.
+    </div>
+    <div style={{display:"flex",gap:8,marginBottom:14}}>
+      {["file","paste"].map(m=><button key={m} className="btn" onClick={()=>setMode(m)} style={{flex:1,padding:"9px 0",background:mode===m?"#6C63FF":"#F3F4F6",color:mode===m?"#fff":"#6B7280",fontSize:13}}>{m==="file"?"📁 Upload File":"✏️ Paste Text"}</button>)}
+    </div>
+    <div style={{background:"#F9FAFB",borderRadius:11,padding:"10px 12px",fontFamily:"monospace",fontSize:10,color:"#374151",marginBottom:14,lineHeight:1.9,overflowX:"auto"}}>
+      Subject,Day,Start Time,End Time,Teacher<br/>
+      Acute Gastritis,2026-04-28,08:45,09:30,Med50/GIT04<br/>
+      CA Esophagus,2026-05-04,08:00,08:45,Surg34/GIT09
+    </div>
+    {mode==="file"
+      ?<label style={{display:"block",padding:24,border:"2px dashed #D1D5DB",borderRadius:14,textAlign:"center",cursor:"pointer",color:"#6B7280",fontSize:13}}>
+        <div style={{fontSize:30,marginBottom:8}}>📂</div>Click to upload CSV or TSV
+        <input type="file" accept=".csv,.tsv,.txt" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>onImport(ev.target.result);r.readAsText(f);}}/>
+      </label>
+      :<><textarea rows={6} value={text} onChange={e=>setText(e.target.value)} placeholder="Paste CSV/TSV…" style={{fontFamily:"monospace",fontSize:12}}/><button className="btn" onClick={()=>onImport(text)} style={{width:"100%",padding:14,background:"#6C63FF",color:"#fff",fontSize:15,marginTop:10}}>Import</button></>
+    }
+    <button className="btn" onClick={onClose} style={{width:"100%",padding:13,background:"#F3F4F6",color:"#6B7280",fontSize:14,marginTop:8}}>Cancel</button>
+  </div>);
+}
