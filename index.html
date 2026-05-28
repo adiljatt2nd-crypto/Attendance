@@ -350,4 +350,313 @@
               <button className="btn" onClick={() => { if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); } else setCalMonth(m => m + 1); }} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 16 }}>›</button>
             </div>
 
-            <div style={{ display: "grid", gridTemp
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 8 }}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ textAlign: "center", fontSize: 11, fontWeight: 700, color: "#9CA3AF" }}>{d}</div>)}
+            </div>
+
+            {weeks.map((week, wi) => (
+              <div key={wi} style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: 4, marginBottom: 4 }}>
+                {week.map((day, di) => {
+                  if (!day) return <div key={di} />;
+                  const iso = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+                  const dEvts = getEvts(iso);
+                  const isToday = iso === today;
+                  const hasEvt = dEvts.length > 0;
+                  const statuses = dEvts.map(e => att[e.id]).filter(Boolean);
+
+                  let bg = "#F9FAFB", border = "2px solid transparent", dot = null;
+                  if (hasEvt) {
+                    if (statuses.length === 0) { bg = "#EEF2FF"; dot = "#6C63FF"; }
+                    else if (statuses.every(s => s === "attended")) { bg = "#DCFCE7"; dot = "#22C55E"; }
+                    else if (statuses.every(s => s === "missed")) { bg = "#FEE2E2"; dot = "#EF4444"; }
+                    else { bg = "#FEF9C3"; dot = "#EAB308"; }
+                  }
+                  if (isToday) border = "2px solid #6C63FF";
+
+                  return (
+                    <div key={di} onClick={() => { if (hasEvt) setDayOpen(iso); }}
+                      style={{ height: 44, borderRadius: 12, background: bg, border, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: hasEvt ? "pointer" : "default", position: "relative" }}>
+                      <span style={{ fontSize: 13, fontWeight: hasEvt ? 700 : 500, color: hasEvt ? "#1F2937" : "#9CA3AF" }}>{day}</span>
+                      {dot && <div style={{ width: 4, height: 4, borderRadius: "50%", background: dot, marginTop: 2 }} />}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function TimelineGroup({ title, date, evts, att, setEvtOpen }) {
+      return (
+        <div className="card" style={{ minWidth: "85%", flexShrink: 0, scrollSnapAlign: "center", padding: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 12 }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: "#1F2937" }}>{title}</div>
+            <div style={{ fontSize: 12, color: "#9CA3AF", fontWeight: 600 }}>{dispDate(date)}</div>
+          </div>
+          {evts.length === 0 ? (
+            <div style={{ padding: "20px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13, background: "#F9FAFB", borderRadius: 12 }}>No classes scheduled</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {evts.map(e => <EventCard key={e.id} evt={e} att={att} onClick={() => setEvtOpen(e)} />)}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    function EventCard({ evt, att, onClick }) {
+      const isWard = evt.type === 'ward';
+      const color = evt.dept?.color || (isWard ? "#0EA5E9" : "#6C63FF");
+      const sm = att[evt.id] ? STATUS[att[evt.id]] : null;
+
+      return (
+        <div onClick={onClick} style={{ display: "flex", background: "#F9FAFB", borderRadius: 12, overflow: "hidden", cursor: "pointer", border: "1px solid #F3F4F6", transition: "transform 0.1s" }}>
+          <div style={{ width: 6, background: color, flexShrink: 0 }} />
+          <div style={{ padding: "10px 12px", flex: 1, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
+                <span style={{ fontSize: 10, fontWeight: 800, color, textTransform: "uppercase", letterSpacing: 0.5 }}>{evt.module || "General"}</span>
+                {isWard && <span style={{ fontSize: 9, background: "#E0F2FE", color: "#0284C7", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>WARD • {evt.shift}</span>}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#1F2937", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{evt.topic}</div>
+              <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>{isWard ? evt.teacher : `${fmt12(evt.start)} ${evt.end ? `- ${fmt12(evt.end)}` : ""}`}</div>
+            </div>
+            {sm ? <div style={{ fontSize: 18 }}>{sm.icon}</div> : <div style={{ width: 24, height: 24, borderRadius: "50%", border: "2px dashed #D1D5DB" }} />}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── ATTENDANCE TAB ───────────────────────────────────────────────────────────
+    function AttTab({ events, att, target, setTarget, setEvtOpen }) {
+      const [filter, setFilter] = useState("Overall");
+
+      const modules = useMemo(() => {
+        const s = new Set();
+        events.forEach(e => { if (e.type === 'lecture' && e.module) s.add(e.module); });
+        const arr = ["Overall"];
+        if (events.some(e => e.type === 'ward')) arr.push("Wards");
+        return [...arr, ...Array.from(s).sort()];
+      }, [events]);
+
+      const filteredEvents = useMemo(() => {
+        if (filter === "Overall") return events.filter(e => e.type === 'lecture');
+        if (filter === "Wards") return events.filter(e => e.type === 'ward');
+        return events.filter(e => e.module === filter);
+      }, [events, filter]);
+
+      const stats = calculateStats(filteredEvents, att, target);
+
+      const subjectStats = useMemo(() => {
+        const map = {};
+        filteredEvents.forEach(e => {
+          const dName = e.dept?.name || "General";
+          if (!map[dName]) map[dName] = { name: dName, color: e.dept?.color, evts: [] };
+          map[dName].evts.push(e);
+        });
+        return Object.values(map).map(sub => ({ ...sub, stats: calculateStats(sub.evts, att, target) }));
+      }, [filteredEvents, att, target]);
+
+      return (
+        <div className="slide">
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 8, marginTop: 16, marginBottom: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#6B7280" }}>Target:</span>
+            {[75, 80, 85].map(t => (
+              <button key={t} className="btn" onClick={() => setTarget(t)} style={{ padding: "4px 10px", fontSize: 12, background: target === t ? "#1F2937" : "#E5E7EB", color: target === t ? "#fff" : "#4B5563", borderRadius: 8 }}>{t}%</button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 12, margin: "0 -14px", paddingLeft: 14, paddingRight: 14, scrollSnapType: "x mandatory" }}>
+            {modules.map(m => (
+              <button key={m} className="btn" onClick={() => setFilter(m)}
+                style={{ padding: "8px 16px", background: filter === m ? "#6C63FF" : "#fff", color: filter === m ? "#fff" : "#6B7280", borderRadius: 20, fontSize: 13, whiteSpace: "nowrap", scrollSnapAlign: "start", border: filter === m ? "1px solid #6C63FF" : "1px solid #E5E7EB", boxShadow: filter === m ? "0 4px 12px rgba(108,99,255,0.2)" : "none" }}>
+                {m}
+              </button>
+            ))}
+          </div>
+
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: "#1F2937", marginBottom: 2 }}>{filter} Attendance</div>
+                <div style={{ fontSize: 13, color: "#6B7280" }}>{stats.totalMarked} marked out of {stats.scheduled} scheduled</div>
+              </div>
+              <div style={{ background: stats.currentPct >= target ? "#DCFCE7" : "#FEE2E2", color: stats.currentPct >= target ? "#16A34A" : "#DC2626", padding: "6px 12px", borderRadius: 12, fontWeight: 800, fontSize: 18 }}>
+                {stats.currentPct}%
+              </div>
+            </div>
+
+            <div style={{ background: "#F9FAFB", padding: 14, borderRadius: 12, border: "1px dashed #D1D5DB" }}>
+              {stats.scheduled === 0 ? (
+                <div style={{ fontSize: 13, color: "#9CA3AF", textAlign: "center" }}>No schedule imported for this module.</div>
+              ) : stats.isImpossible ? (
+                <div style={{ color: "#DC2626", fontSize: 13, fontWeight: 600 }}>❌ Mathematically impossible to reach {target}%. (Need {stats.needMore} more, but only {stats.unmarkedRemaining} remain).</div>
+              ) : stats.needMore > 0 ? (
+                <div style={{ color: "#D97706", fontSize: 13, fontWeight: 600 }}>⚠️ Need <span style={{ fontSize: 16, fontWeight: 800 }}>{stats.needMore}</span> more classes out of the {stats.unmarkedRemaining} remaining schedule to secure {target}%.</div>
+              ) : (
+                <div style={{ color: "#16A34A", fontSize: 13, fontWeight: 600 }}>✅ Target secured! You can safely skip {stats.skipsLeft} more classes.</div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12, color: "#374151" }}>Subject Breakdown</div>
+          {subjectStats.map(sub => (
+            <div key={sub.name} className="card" style={{ marginBottom: 10, padding: 14, display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: (sub.color || "#6C63FF") + "22", display: "flex", alignItems: "center", justifyContent: "center", color: sub.color || "#6C63FF", fontWeight: 800, fontSize: 14 }}>
+                {sub.stats.currentPct}%
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "#1F2937", marginBottom: 2 }}>{sub.name}</div>
+                <div style={{ fontSize: 12, color: "#6B7280" }}>{sub.stats.attended} attended • {sub.stats.missed} missed</div>
+              </div>
+              <div style={{ textAlign: "right", fontSize: 11, fontWeight: 600, color: sub.stats.needMore > 0 ? "#EF4444" : "#22C55E" }}>
+                {sub.stats.needMore > 0 ? `Need ${sub.stats.needMore}` : "Safe"}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ─── BOTTOM SHEETS ────────────────────────────────────────────────────────────
+    function DaySheet({ date, events, att, setEvtOpen, onClose }) {
+      const evts = events.filter(e => e.date === date).sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'ward' ? -1 : 1;
+        return t2m(a.start) - t2m(b.start);
+      });
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 20 }}>{new Date(date).toLocaleDateString("en-IN", { weekday: "long" })}</div>
+              <div style={{ color: "#6B7280", fontSize: 13 }}>{dispDate(date)}</div>
+            </div>
+            <button className="btn" onClick={onClose} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 13 }}>✕</button>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {evts.map(e => <EventCard key={e.id} evt={e} att={att} onClick={() => setEvtOpen(e)} />)}
+          </div>
+        </div>
+      );
+    }
+
+    function EvtSheet({ evt, att, mark, clearMark, onEdit, onClose }) {
+      const current = att[evt.id];
+      const isWard = evt.type === 'ward';
+      const color = evt.dept?.color || "#6C63FF";
+
+      return (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+            <span className="chip" style={{ background: color + "20", color }}>{evt.dept?.name || "General"}</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn" onClick={onEdit} style={{ padding: "6px 12px", background: "#E0F2FE", color: "#0284C7", fontSize: 12 }}>✏️ Edit</button>
+              <button className="btn" onClick={onClose} style={{ padding: "6px 12px", background: "#F3F4F6", fontSize: 12 }}>✕</button>
+            </div>
+          </div>
+          <div style={{ fontWeight: 800, fontSize: 18, color: "#1F2937", lineHeight: 1.3, marginBottom: 16 }}>{evt.topic}</div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 20 }}>
+            {[
+              ["📅 Date", dispDate(evt.date)],
+              ["⏰ Time", isWard ? `${evt.shift} Shift` : `${fmt12(evt.start)}`],
+              ["📚 Module", evt.module || "General"],
+              ["👤 Teacher", evt.teacher || "—"]
+            ].map(([lb, v]) => (
+              <div key={lb} style={{ background: "#F9FAFB", borderRadius: 12, padding: "10px 12px", border: "1px solid #F3F4F6" }}>
+                <div style={{ fontSize: 11, color: "#9CA3AF", marginBottom: 2 }}>{lb}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: "#374151" }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 12 }}>Mark Status</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {Object.entries(STATUS).map(([k, { icon, label, bg, fg, fill }]) => (
+              <button key={k} className="btn" onClick={() => mark(evt.id, k)}
+                style={{ padding: "14px 10px", background: current === k ? fill : bg, color: current === k ? "#fff" : fg, border: `2px solid ${current === k ? fill : fg + "30"}`, fontSize: 14, display: "flex", alignItems: "center", justifycontent: "center", gap: 8, borderRadius: 14 }}>
+                {icon} {label}
+              </button>
+            ))}
+          </div>
+          {current && <button className="btn" onClick={() => clearMark(evt.id)} style={{ width: "100%", padding: 14, background: "#F3F4F6", color: "#6B7280", fontSize: 14, marginTop: 12 }}>Clear Mark</button>}
+        </div>
+      );
+    }
+
+    function EditSheet({ evt, onSave, onClose }) {
+      const [form, setForm] = useState({ ...evt });
+      return (
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>Edit Details</div>
+          <label>Topic</label><input value={form.topic} onChange={e => setForm({ ...form, topic: e.target.value })} />
+          <label>Date</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+          {!form.type || form.type === 'lecture' ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div><label>Start</label><input type="time" value={form.start || ""} onChange={e => setForm({ ...form, start: e.target.value })} /></div>
+              <div><label>Module</label><input value={form.module || ""} onChange={e => setForm({ ...form, module: e.target.value })} /></div>
+            </div>
+          ) : (
+            <div><label>Teacher/SR</label><input value={form.teacher || ""} onChange={e => setForm({ ...form, teacher: e.target.value })} /></div>
+          )}
+          <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
+            <button className="btn" onClick={onClose} style={{ flex: 1, padding: 14, background: "#F3F4F6", color: "#6B7280" }}>Cancel</button>
+            <button className="btn" onClick={() => onSave(form)} style={{ flex: 1, padding: 14, background: "#6C63FF", color: "#fff" }}>Save</button>
+          </div>
+        </div>
+      );
+    }
+
+    function ImportSheet({ onImport, onClose }) {
+      const [mode, setMode] = useState("lectures");
+      const [text, setText] = useState("");
+      const [moduleName, setModuleName] = useState("GIT");
+
+      const promptText = `Act as an expert data extractor. I am a Final Year MBBS student at King Edward Medical University and need this timetable converted to a precise CSV format. 
+Extract the data into a pure CSV table (no markdown code blocks, just raw text). 
+
+RULES:
+For regular lectures use columns exactly: Subject, Date (YYYY-MM-DD), Start Time, End Time, Teacher.
+For Wards use columns exactly: Date (YYYY-MM-DD), Day, Morning Class Topic, Morning Teacher, Evening Class, Senior Registrar.
+Do not include empty rows. Ensure strict date formatting.`;
+
+      return (
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 18, marginBottom: 16 }}>Import Timetable</div>
+
+          <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 12, padding: 4, marginBottom: 16 }}>
+            {[{ id: "lectures", label: "Lectures" }, { id: "wards", label: "Wards" }, { id: "ai", label: "✨ AI Prompt" }].map(m => (
+              <button key={m.id} className="btn" onClick={() => setMode(m.id)} style={{ flex: 1, padding: "8px 0", background: mode === m.id ? "#fff" : "transparent", color: mode === m.id ? "#1F2937" : "#6B7280", borderRadius: 8, fontSize: 13, boxShadow: mode === m.id ? "0 2px 6px rgba(0,0,0,0.05)" : "none" }}>{m.label}</button>
+            ))}
+          </div>
+
+          {mode === "ai" ? (
+            <div className="slide">
+              <div style={{ fontSize: 13, color: "#6B7280", marginBottom: 12 }}>Copy this prompt and paste it into ChatGPT, Claude, or Gemini along with a photo/PDF of your timetable. Paste the resulting CSV back into the Lectures or Wards tab.</div>
+              <textarea readOnly value={promptText} rows={8} style={{ fontSize: 12, lineHeight: 1.5, background: "#F9FAFB", marginBottom: 12 }} />
+              <button className="btn" onClick={() => { navigator.clipboard.writeText(promptText); alert("Copied!"); }} style={{ width: "100%", padding: 14, background: "#1F2937", color: "#fff" }}>📋 Copy Prompt</button>
+            </div>
+          ) : (
+            <div className="slide">
+              {mode === "lectures" && (
+                <div style={{ marginBottom: 12 }}>
+                  <label>Assign to Module / Block Name</label>
+                  <input value={moduleName} onChange={e => setModuleName(e.target.value)} placeholder="e.g., GIT, Renal, Medicine" />
+                </div>
+              )}
+              <textarea rows={6} value={text} onChange={e => setText(e.target.value)} placeholder={`Paste ${mode === "wards" ? "Wards CSV (Date, Day, Morning Class, Evening...)" : "Lectures CSV (Subject, Date, Start, End...)"} here...`} style={{ fontFamily: "monospace", fontSize: 11, marginBottom: 12, whiteSpace: "pre" }} />
+              <button className="btn" onClick={() => onImport(text, mode, moduleName)} style={{ width: "100%", padding: 14, background: "#6C63FF", color: "#fff", fontSize: 15 }}>Upload Data</button>
+            </div>
+          )}
+          <button className="btn" onClick={onClose} style={{ width: "100%", padding: 14, background: "transparent", color: "#6B7280", fontSize: 14, marginTop: 8 }}>Cancel</button>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
