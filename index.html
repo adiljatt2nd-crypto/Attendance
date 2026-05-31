@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="LecTrack">
 <meta name="theme-color" content="#800020">
 <title>MedLecTrack</title>
-<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22MedLecTrack%22%2C%22short_name%22%3A%22LecTrack%22%2C%22description%22%3A%22MBBS%20Attendance%20%26%20Lecture%20Manager%22%2C%22start_url%22%3A%22./%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FAF4EE%22%2C%22theme_color%22%3A%22%23800020%22%2C%22orientation%22%3A%22portrait-primary%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage/svg%2Bxml%2C%253Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20192%20192%27%253E%253Crect%20width%3D%27192%27%20height%3D%27192%27%20rx%3D%2732%27%20fill%3D%27%2523800020%27/%253E%253Ctext%20x%3D%2796%27%20y%3D%27140%27%20font-size%3D%27120%27%20text-anchor%3D%27middle%27%253E%25F0%259F%2593%258B%253C/text%253E%253C/svg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image/svg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%2C%7B%22src%22%3A%22data%3Aimage/svg%2Bxml%2C%253Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20512%20512%27%253E%253Crect%20width%3D%27512%27%20height%3D%27512%27%20rx%3D%2780%27%20fill%3D%27%2523800020%27/%253E%253Ctext%20x%3D%27256%27%20y%3D%27370%27%20font-size%3D%27320%27%20text-anchor%3D%27middle%27%253E%25F0%259F%2593%258B%253C/text%253E%253C/svg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image/svg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22MedLecTrack%22%2C%22short_name%22%3A%22LecTrack%22%2C%22description%22%3A%22MBBS%20Attendance%20Manager%22%2C%22start_url%22%3A%22./%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23FAF4EE%22%2C%22theme_color%22%3A%22%23800020%22%2C%22orientation%22%3A%22portrait-primary%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage/svg%2Bxml%2C%253Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20192%20192%27%253E%253Crect%20width%3D%27192%27%20height%3D%27192%27%20rx%3D%2732%27%20fill%3D%27%2523800020%27/%253E%253Ctext%20x%3D%2796%27%20y%3D%27140%27%20font-size%3D%27120%27%20text-anchor%3D%27middle%27%253E%25F0%259F%2593%258B%253C/text%253E%253C/svg%253E%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image/svg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%2C%7B%22src%22%3A%22data%3Aimage/svg%2Bxml%2C%253Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20viewBox%3D%270%200%20512%20512%27%253E%253Crect%20width%3D%27512%27%20height%3D%27512%27%20rx%3D%2780%27%20fill%3D%27%2523800020%27/%253E%253Ctext%20x%3D%27256%27%20y%3D%27370%27%20font-size%3D%27320%27%20text-anchor%3D%27middle%27%253E%25F0%259F%2593%258B%253C/text%253E%253C/svg%253E%22%2C%22sizes%22%3A%22512x512%22%2C%22type%22%3A%22image/svg%2Bxml%22%2C%22purpose%22%3A%22any%20maskable%22%7D%5D%7D">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%23800020'/%3E%3Ctext x='90' y='126' font-size='110' text-anchor='middle'%3E%F0%9F%93%8B%3C/text%3E%3C/svg%3E">
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -19,35 +19,277 @@ button,a{touch-action:manipulation}
 </style>
 </head>
 <body>
-<div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;background:#FAF4EE;font-family:sans-serif"><div style="font-size:48px">📋</div><div style="color:#800020;font-weight:700;font-size:16px">Loading…</div></div></div>
-
+<div id="root"><div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;background:#FAF4EE;font-family:sans-serif"><div style="font-size:48px">📋</div><div style="color:#800020;font-weight:700;font-size:16px">Loading MedLecTrack…</div></div></div>
 <script>
-if('serviceWorker' in navigator){
-  try{
-    const b=new Blob(["\nconst CACHE='mlt-v3';\nself.addEventListener('install',e=>{e.waitUntil(self.skipWaiting());});\nself.addEventListener('activate',e=>{e.waitUntil(self.clients.claim());});\nself.addEventListener('fetch',e=>{\n  e.respondWith(\n    caches.match(e.request).then(r=>{\n      if(r) return r;\n      return fetch(e.request).then(res=>{\n        if(res.ok && e.request.method==='GET'){\n          const c=res.clone();\n          caches.open(CACHE).then(cache=>cache.put(e.request,c));\n        }\n        return res;\n      });\n    })\n  );\n});\n"],{type:'application/javascript'});
-    navigator.serviceWorker.register(URL.createObjectURL(b),{scope:'./'});
-  }catch(e){}
-}
-let _dip;
-window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();_dip=e;
-  setTimeout(()=>{
-    if(_dip&&!matchMedia('(display-mode:standalone)').matches){
-      const b=document.createElement('div');
-      b.innerHTML=`<div id="_ib" style="position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:#800020;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;z-index:9999;display:flex;align-items:center;gap:8px;box-shadow:0 4px 20px #0005;cursor:pointer">📲 Add to Home Screen <button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:#fff9;font-size:18px;cursor:pointer;line-height:1">×</button></div>`;
-      document.body.appendChild(b);
-      document.getElementById('_ib').onclick=async()=>{if(_dip){await _dip.prompt();_dip=null;}b.remove();};
-    }
-  },3000);
-});
+if('serviceWorker' in navigator){try{const b=new Blob(["const CACHE='mlt-v4';\nself.addEventListener('install',e=>{e.waitUntil(self.skipWaiting());});\nself.addEventListener('activate',e=>{e.waitUntil(self.clients.claim());});\nself.addEventListener('fetch',e=>{e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{if(res.ok&&e.request.method==='GET'){const c=res.clone();caches.open(CACHE).then(ch=>ch.put(e.request,c));}return res;})));});"],{type:'application/javascript'});navigator.serviceWorker.register(URL.createObjectURL(b),{scope:'./'});}catch(e){}}
+let _dip;window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_dip=e;setTimeout(()=>{if(_dip&&!matchMedia('(display-mode:standalone)').matches){const b=document.createElement('div');b.innerHTML=`<div id="_ib" style="position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:#800020;color:#fff;padding:10px 18px;border-radius:20px;font-size:13px;font-weight:700;z-index:9999;display:flex;align-items:center;gap:8px;box-shadow:0 4px 20px #0005;cursor:pointer">📲 Add to Home Screen <button onclick="this.parentNode.parentNode.remove()" style="background:none;border:none;color:#fff9;font-size:18px;cursor:pointer">×</button></div>`;document.body.appendChild(b);document.getElementById('_ib').onclick=async()=>{if(_dip){await _dip.prompt();_dip=null;}b.remove();};}}),3000);}});
 </script>
 
-<!-- React 18 UMD (no build step needed) -->
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
+<!-- ═══ INLINE REACT (no network needed) ═══ -->
 <script>
-// Pre-compiled — NO Babel needed
+/**
+ * Minimal React 18-compatible implementation
+ * Supports functional components with hooks: useState, useEffect, useCallback, useMemo, useRef
+ * Uses full DOM replacement on state change (simple but correct for this app size)
+ */
+(function(global) {
+  'use strict';
+
+  // ─── Virtual DOM ──────────────────────────────────────────────────────────
+  function createElement(type, props) {
+    var args = Array.prototype.slice.call(arguments, 2);
+    var children = [];
+    for (var i = 0; i < args.length; i++) {
+      var child = args[i];
+      if (Array.isArray(child)) {
+        for (var j = 0; j < child.length; j++) {
+          if (child[j] !== null && child[j] !== undefined && child[j] !== false && child[j] !== true)
+            children.push(child[j]);
+        }
+      } else if (child !== null && child !== undefined && child !== false && child !== true) {
+        children.push(child);
+      }
+    }
+    return { $$: 1, type: type, props: props || {}, children: children };
+  }
+
+  var Fragment = '__fragment__';
+
+  // ─── Hook state ───────────────────────────────────────────────────────────
+  var currentFiber = null;
+  var hookCursor = 0;
+
+  // ─── Scheduler ────────────────────────────────────────────────────────────
+  var roots = [];
+  var scheduled = false;
+
+  function schedule() {
+    if (scheduled) return;
+    scheduled = true;
+    Promise.resolve().then(function() {
+      scheduled = false;
+      roots.forEach(function(r) { if (r.dirty) doRender(r); });
+    });
+  }
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+  function doRender(root) {
+    root.dirty = false;
+    var dom = buildDom(root.vnode, root.ctx);
+    root.container.innerHTML = '';
+    if (dom) root.container.appendChild(dom);
+  }
+
+  // Component fiber registry: keyed by a path string built during render
+  var fiberRegistry = {};
+  var currentPath = '';
+
+  function buildDom(vnode, ctx) {
+    if (vnode === null || vnode === undefined || vnode === false || vnode === true) return null;
+    if (typeof vnode === 'string' || typeof vnode === 'number') {
+      return document.createTextNode(String(vnode));
+    }
+    if (Array.isArray(vnode)) {
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < vnode.length; i++) {
+        var d = buildDom(vnode[i], ctx);
+        if (d) frag.appendChild(d);
+      }
+      return frag;
+    }
+    if (!vnode.$$) return null;
+
+    var type = vnode.type;
+    var props = vnode.props || {};
+    var children = vnode.children || [];
+
+    // Fragment
+    if (type === Fragment) {
+      var frag = document.createDocumentFragment();
+      children.forEach(function(c) { var d = buildDom(c, ctx); if (d) frag.appendChild(d); });
+      return frag;
+    }
+
+    // Functional component
+    if (typeof type === 'function') {
+      var savedPath = currentPath;
+      var key = props.key != null ? props.key : '';
+      currentPath = currentPath + '/' + (type.name || 'Anon') + (key ? ':' + key : '');
+      var path = currentPath;
+
+      if (!fiberRegistry[path]) {
+        fiberRegistry[path] = { hooks: [], path: path, ctx: ctx };
+      }
+      var fiber = fiberRegistry[path];
+      fiber.ctx = ctx;
+
+      var savedFiber = currentFiber;
+      var savedCursor = hookCursor;
+      currentFiber = fiber;
+      hookCursor = 0;
+
+      // Merge props with children
+      var mergedProps = Object.assign({}, props);
+      if (children.length === 1) mergedProps.children = children[0];
+      else if (children.length > 1) mergedProps.children = children;
+
+      var result;
+      try { result = type(mergedProps); } catch(e) { console.error(type.name, e); result = null; }
+
+      currentFiber = savedFiber;
+      hookCursor = savedCursor;
+      currentPath = savedPath;
+
+      return buildDom(result, ctx);
+    }
+
+    // DOM element
+    var el = document.createElement(type);
+
+    // Apply props
+    Object.keys(props).forEach(function(k) {
+      if (k === 'key' || k === 'ref') return;
+      applyProp(el, k, props[k]);
+    });
+
+    // Children from props (JSX spreads children into props)
+    var propChildren = props.children;
+    var allChildren = children.length > 0 ? children : (propChildren !== undefined ? [].concat(propChildren) : []);
+
+    allChildren.forEach(function(child) {
+      if (child === null || child === undefined || child === false || child === true) return;
+      var d = buildDom(child, ctx);
+      if (d) el.appendChild(d);
+    });
+
+    return el;
+  }
+
+  function applyProp(el, key, val) {
+    if (val === null || val === undefined) return;
+    if (key === 'className') { el.className = val || ''; return; }
+    if (key === 'htmlFor') { el.htmlFor = val; return; }
+    if (key === 'style' && typeof val === 'object') { Object.assign(el.style, val); return; }
+    if (key === 'dangerouslySetInnerHTML') { el.innerHTML = val.__html; return; }
+    if (key === 'children') return;
+    if (key.startsWith('on') && typeof val === 'function') {
+      el.addEventListener(key.slice(2).toLowerCase(), val);
+      return;
+    }
+    if (key === 'value' || key === 'checked' || key === 'selected' || key === 'disabled' ||
+        key === 'readOnly' || key === 'multiple' || key === 'defaultValue') {
+      if (key === 'disabled' || key === 'readOnly' || key === 'multiple') {
+        if (val) el.setAttribute(key.toLowerCase(), '');
+      } else {
+        el[key] = val;
+      }
+      return;
+    }
+    if (key === 'rows' || key === 'cols' || key === 'tabIndex') { el.setAttribute(key.toLowerCase(), val); return; }
+    if (typeof val === 'boolean') { if (val) el.setAttribute(key, ''); return; }
+    if (typeof val !== 'object' && typeof val !== 'function') el.setAttribute(key, val);
+  }
+
+  // ─── Hooks ────────────────────────────────────────────────────────────────
+  function useState(initial) {
+    var hooks = currentFiber.hooks;
+    var i = hookCursor++;
+    if (hooks[i] === undefined) {
+      hooks[i] = { tag: 'state', val: typeof initial === 'function' ? initial() : initial };
+    }
+    var hook = hooks[i];
+    var fiber = currentFiber;
+    function setter(next) {
+      var v = typeof next === 'function' ? next(hook.val) : next;
+      if (v !== hook.val) {
+        hook.val = v;
+        fiber.ctx.dirty = true;
+        // Clear fiber registry so components re-render fresh
+        // But keep hooks intact
+        schedule();
+      }
+    }
+    return [hook.val, setter];
+  }
+
+  function useEffect(fn, deps) {
+    var hooks = currentFiber.hooks;
+    var i = hookCursor++;
+    var prev = hooks[i];
+    var changed = !prev || !deps || deps.some(function(d, j) { return d !== prev.deps[j]; });
+    if (!prev) hooks[i] = { tag: 'effect', deps: deps || [], cleanup: null };
+    else hooks[i].deps = deps || [];
+    if (changed) {
+      var hook = hooks[i];
+      if (hook.cleanup) { try { hook.cleanup(); } catch(e) {} }
+      Promise.resolve().then(function() {
+        try {
+          var c = fn();
+          hook.cleanup = typeof c === 'function' ? c : null;
+        } catch(e) { console.error('useEffect error:', e); }
+      });
+    }
+  }
+
+  function useCallback(fn, deps) {
+    var hooks = currentFiber.hooks;
+    var i = hookCursor++;
+    var prev = hooks[i];
+    var changed = !prev || deps.some(function(d, j) { return d !== prev.deps[j]; });
+    if (changed) hooks[i] = { tag: 'cb', fn: fn, deps: deps };
+    return hooks[i].fn;
+  }
+
+  function useMemo(fn, deps) {
+    var hooks = currentFiber.hooks;
+    var i = hookCursor++;
+    var prev = hooks[i];
+    var changed = !prev || (deps && deps.some(function(d, j) { return d !== prev.deps[j]; }));
+    if (changed) hooks[i] = { tag: 'memo', val: fn(), deps: deps || [] };
+    return hooks[i].val;
+  }
+
+  function useRef(initial) {
+    var hooks = currentFiber.hooks;
+    var i = hookCursor++;
+    if (!hooks[i]) hooks[i] = { tag: 'ref', current: initial };
+    return hooks[i];
+  }
+
+  // ─── createRoot ───────────────────────────────────────────────────────────
+  function createRoot(container) {
+    var root = { container: container, vnode: null, ctx: null, dirty: false };
+    root.ctx = root;
+    roots.push(root);
+    return {
+      render: function(vnode) {
+        root.vnode = vnode;
+        root.dirty = true;
+        doRender(root);
+      }
+    };
+  }
+
+  // ─── Exports ──────────────────────────────────────────────────────────────
+  global.React = {
+    createElement: createElement,
+    Fragment: Fragment,
+    useState: useState,
+    useEffect: useEffect,
+    useCallback: useCallback,
+    useMemo: useMemo,
+    useRef: useRef,
+    createRoot: createRoot,
+    Children: {
+      map: function(c, f) { return [].concat(c || []).map(f); },
+      toArray: function(c) { return [].concat(c || []); }
+    }
+  };
+  global.ReactDOM = { createRoot: createRoot };
+
+})(window);
+
+// ═══ APP (pre-compiled JSX → JS, no Babel) ═══
 const { useState, useCallback, useEffect } = React;
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
@@ -398,6 +640,41 @@ function App() {
     const [modules, setModules] = useState([]);
     const [subjects, setSubjects] = useState([]);
     const [lectures, setLectures] = useState([]);
+    const [att, setAtt] = useState({});
+    const [wardSchedule, setWardSchedule] = useState([]);
+    const [wardRoster, setWardRoster] = useState([]);
+    const [wardManual, setWardManual] = useState([]);
+    const [wardHidden, setWardHidden] = useState([]);
+    const [wardAtt, setWardAtt] = useState({});
+    const [sessionsPerDay, setSessionsPerDay] = useState(2);
+    const [target, setTarget] = useState(75);
+    const [tab, setTab] = useState("upcoming");
+    const [profile, setProfile] = useState({ name: "", class: "", regNo: "", rollNo: "", college: "", batch: "" });
+    const [profileOpen, setProfileOpen] = useState(false);
+    const [exportOpen, setExportOpen] = useState(false);
+    const [importBackupOpen, setImportBackupOpen] = useState(false);
+    const now = new Date();
+    const [calYear, setCalYear] = useState(now.getFullYear());
+    const [calMonth, setCalMonth] = useState(now.getMonth());
+    const [wardCalYear, setWardCalYear] = useState(now.getFullYear());
+    const [wardCalMonth, setWardCalMonth] = useState(now.getMonth());
+    const [dayOpen, setDayOpen] = useState(null);
+    const [wardDayOpen, setWardDayOpen] = useState(null);
+    const [lecOpen, setLecOpen] = useState(null);
+    const [editLecOpen, setEditLecOpen] = useState(null);
+    const [addLecDate, setAddLecDate] = useState(null);
+    const [importOpen, setImportOpen] = useState(false);
+    const [wardImportOpen, setWardImportOpen] = useState(false);
+    const [wardImportTab, setWardImportTab] = useState("schedule");
+    const openWardImport = (tab = "schedule") => { setWardImportTab(tab); setWardImportOpen(true); };
+    const [editSubOpen, setEditSubOpen] = useState(null);
+    const [addSubOpen, setAddSubOpen] = useState(false);
+    const [editWardSession, setEditWardSession] = useState(null);
+    const [manageModulesOpen, setManageModulesOpen] = useState(false);
+    const [manageWardOpen, setManageWardOpen] = useState(false);
+    const [editWardScheduleEntry, setEditWardScheduleEntry] = useState(null);
+    const [toast, setToast] = useState(null);
+    const showToast = (msg, err = false) => { setToast({ msg, err }); setTimeout(() => setToast(null), 2800); };
     // Migration: fix any previously imported lectures that got wrong subjectId via garbage detection
     useEffect(() => {
         setLectures(prev => {
@@ -435,42 +712,6 @@ function App() {
     }catch(e){}
   },[modules,subjects,lectures,att,wardSchedule,wardRoster,wardManual,wardHidden,wardAtt,sessionsPerDay,target,profile]);
 
-    const [att, setAtt] = useState({});
-    const [wardSchedule, setWardSchedule] = useState([]);
-    const [wardRoster, setWardRoster] = useState([]);
-    const [wardManual, setWardManual] = useState([]); // manually added ward sessions {id,date,session,topic,teacher}
-    const [wardHidden, setWardHidden] = useState([]); // keys of auto sessions explicitly removed by user
-    const [wardAtt, setWardAtt] = useState({});
-    const [sessionsPerDay, setSessionsPerDay] = useState(2);
-    const [target, setTarget] = useState(75);
-    const [tab, setTab] = useState("upcoming");
-    // ── Student Profile ───────────────────────────────────────────────────────
-    const [profile, setProfile] = useState({ name: "", class: "", regNo: "", rollNo: "", college: "", batch: "" });
-    const [profileOpen, setProfileOpen] = useState(false);
-    const [exportOpen, setExportOpen] = useState(false);
-    const [importBackupOpen, setImportBackupOpen] = useState(false);
-    const now = new Date();
-    const [calYear, setCalYear] = useState(now.getFullYear());
-    const [calMonth, setCalMonth] = useState(now.getMonth());
-    const [wardCalYear, setWardCalYear] = useState(now.getFullYear());
-    const [wardCalMonth, setWardCalMonth] = useState(now.getMonth());
-    const [dayOpen, setDayOpen] = useState(null);
-    const [wardDayOpen, setWardDayOpen] = useState(null);
-    const [lecOpen, setLecOpen] = useState(null);
-    const [editLecOpen, setEditLecOpen] = useState(null);
-    const [addLecDate, setAddLecDate] = useState(null);
-    const [importOpen, setImportOpen] = useState(false);
-    const [wardImportOpen, setWardImportOpen] = useState(false);
-    const [wardImportTab, setWardImportTab] = useState("schedule");
-    const openWardImport = (tab = "schedule") => { setWardImportTab(tab); setWardImportOpen(true); };
-    const [editSubOpen, setEditSubOpen] = useState(null);
-    const [addSubOpen, setAddSubOpen] = useState(false);
-    const [editWardSession, setEditWardSession] = useState(null); // {date,session}
-    const [manageModulesOpen, setManageModulesOpen] = useState(false);
-    const [manageWardOpen, setManageWardOpen] = useState(false);
-    const [editWardScheduleEntry, setEditWardScheduleEntry] = useState(null); // {id,name,from,to} or null for add
-    const [toast, setToast] = useState(null);
-    const showToast = (msg, err = false) => { setToast({ msg, err }); setTimeout(() => setToast(null), 2800); };
     // ── Helpers ───────────────────────────────────────────────────────────────
     const heldLecs = useCallback(lecs => lecs.filter(l => l.date && isPast(l.date) && !l._unassigned), []);
     const lecsOnDate = useCallback(iso => lectures.filter(l => l.date === iso).sort((a, b) => t2m(a.start) - t2m(b.start)), [lectures]);
@@ -710,467 +951,6 @@ function App() {
             showToast("Invalid backup file: " + e.message, true);
         }
     };
-    // ── Print (v3.3 — rich report with student profile) ───────────────────────
-    const printReport = () => {
-        const ov = overall(), ws = wardStats(), wssObj = wardSubjectStats();
-        // BUG FIX: wardSubjectStats returns {wardList, cpcStats} — not a plain array
-        const wardList = wssObj.wardList || [];
-        const cpcStats = wssObj.cpcStats || null;
-        // ── helper: inline SVG donut ──────────────────────────────────────────────
-        const donut = (val, total, color, size = 120, stroke = 14) => {
-            const r = (size - stroke) / 2, circ = 2 * Math.PI * r;
-            const missed = total > 0 ? Math.round((total - val) / total * 100) : 0;
-            const attPct = total > 0 ? Math.round(val / total * 100) : 0;
-            const attDash = attPct / 100 * circ, missDash = missed / 100 * circ;
-            return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#EDE0D0" stroke-width="${stroke}"/>
-        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#EF4444" stroke-width="${stroke}"
-          stroke-dasharray="${circ} 0" stroke-dashoffset="0" transform="rotate(-90 ${size / 2} ${size / 2})"/>
-        <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}"
-          stroke-dasharray="${attDash} ${circ}" stroke-dashoffset="0" transform="rotate(-90 ${size / 2} ${size / 2})" stroke-linecap="round"/>
-        <text x="${size / 2}" y="${size / 2 - 6}" text-anchor="middle" font-size="18" font-weight="800" fill="#2C1810">${attPct}%</text>
-        <text x="${size / 2}" y="${size / 2 + 10}" text-anchor="middle" font-size="9" fill="#7A5C4F">${val}/${total}</text>
-      </svg>`;
-        };
-        // ── helper: horizontal bar chart (subject attendance) ────────────────────
-        const hBar = (items, targetPct) => {
-            if (!items.length)
-                return '<p style="color:#aaa;font-size:12px">No data</p>';
-            const sorted = [...items].sort((a, b) => a.pct - b.pct);
-            const rows = sorted.map(it => {
-                const color = it.pct >= targetPct ? "#2DB8AB" : "#EF4444";
-                const bg = it.pct >= targetPct ? "#E6FAF8" : "#FFE8E8";
-                const barW = Math.max(it.pct, 1);
-                return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-          <div style="width:130px;font-size:11px;color:#2C1810;font-weight:600;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;flex-shrink:0" title="${it.name}">${it.name}</div>
-          <div style="flex:1;background:#F3EDE6;border-radius:6px;height:18px;overflow:hidden;position:relative">
-            <div style="width:${barW}%;height:100%;background:${color};border-radius:6px;transition:width .4s"></div>
-            <div style="position:absolute;left:0;top:0;width:100%;height:100%;display:flex;align-items:center;padding-left:6px">
-              <span style="font-size:10px;font-weight:700;color:${it.pct > 30 ? "#fff" : "#2C1810"}">${it.pct}%</span>
-            </div>
-          </div>
-          <div style="width:52px;font-size:10px;color:#7A5C4F;text-align:right;flex-shrink:0">${it.attended}/${it.total}</div>
-          <div style="width:44px;background:${bg};color:${color};font-size:9px;font-weight:700;padding:2px 5px;border-radius:5px;text-align:center;flex-shrink:0">${it.pct >= targetPct ? "✓ OK" : "✗ LOW"}</div>
-        </div>`;
-            }).join("");
-            return `<div>${rows}<div style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:10px;color:#7A5C4F">
-        <div style="width:10px;height:10px;background:#2DB8AB;border-radius:2px"></div>Above target
-        <div style="width:10px;height:10px;background:#EF4444;border-radius:2px;margin-left:8px"></div>Below target
-        <div style="width:2px;height:14px;background:#800020;margin-left:8px"></div>Target ${targetPct}%
-      </div></div>`;
-        };
-        // ── helper: weekly trend sparkline ───────────────────────────────────────
-        const weeklyTrend = () => {
-            const weeks = {};
-            lectures.filter(l => l.date && isPast(l.date) && !l._unassigned && att[l.id] !== "cancelled" && att[l.id] !== "holiday").forEach(l => {
-                const d = new Date(l.date + "T12:00:00");
-                const mon = new Date(d);
-                mon.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-                const key = mon.toISOString().slice(0, 10);
-                if (!weeks[key])
-                    weeks[key] = { key, att: 0, total: 0 };
-                weeks[key].total++;
-                if (att[l.id] === "attended")
-                    weeks[key].att++;
-            });
-            const pts = Object.values(weeks).sort((a, b) => a.key.localeCompare(b.key)).map(w => (Object.assign(Object.assign({}, w), { pct: w.total > 0 ? Math.round(w.att / w.total * 100) : 0 })));
-            if (pts.length < 2)
-                return '<p style="color:#aaa;font-size:12px;text-align:center">Not enough data for trend (need ≥2 weeks)</p>';
-            const W = 560, H = 120, pad = 30, innerW = W - pad * 2, innerH = H - pad * 2;
-            const maxP = 100, n = pts.length;
-            const xPos = i => pad + i / (n - 1) * innerW;
-            const yPos = p => pad + innerH - (p / maxP) * innerH;
-            // target line
-            const ty = yPos(target);
-            const polyline = pts.map((p, i) => `${xPos(i)},${yPos(p.pct)}`).join(" ");
-            const area = `${xPos(0)},${H - pad} ` + pts.map((p, i) => `${xPos(i)},${yPos(p.pct)}`).join(" ") + ` ${xPos(n - 1)},${H - pad}`;
-            const dots = pts.map((p, i) => `<circle cx="${xPos(i)}" cy="${yPos(p.pct)}" r="4" fill="${p.pct >= target ? "#2DB8AB" : "#EF4444"}" stroke="#fff" stroke-width="1.5"/>
-        <text x="${xPos(i)}" y="${yPos(p.pct) - 8}" text-anchor="middle" font-size="8" fill="#2C1810" font-weight="700">${p.pct}%</text>`).join("");
-            const xlabels = pts.filter((_, i) => i === 0 || i === pts.length - 1 || i % Math.max(1, Math.floor(pts.length / 5)) === 0)
-                .map(p => { const i = pts.indexOf(p); const [y, m, d] = p.key.split("-"); return `<text x="${xPos(i)}" y="${H - 4}" text-anchor="middle" font-size="8" fill="#7A5C4F">${d}/${m}</text>`; }).join("");
-            return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible">
-        <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#800020" stop-opacity="0.18"/><stop offset="100%" stop-color="#800020" stop-opacity="0"/></linearGradient></defs>
-        <polygon points="${area}" fill="url(#tg)"/>
-        <polyline points="${polyline}" fill="none" stroke="#800020" stroke-width="2" stroke-linejoin="round"/>
-        <line x1="${pad}" y1="${ty}" x2="${W - pad}" y2="${ty}" stroke="#DAA520" stroke-width="1.5" stroke-dasharray="5,3"/>
-        <text x="${W - pad + 4}" y="${ty + 4}" font-size="9" fill="#DAA520" font-weight="700">${target}%</text>
-        ${dots}${xlabels}
-        <text x="${pad}" y="${pad - 6}" font-size="9" fill="#7A5C4F">100%</text>
-        <text x="${pad}" y="${H - pad + 3}" font-size="9" fill="#7A5C4F">0%</text>
-      </svg>`;
-        };
-        // ── helper: day-of-week missed bar ────────────────────────────────────────
-        const dowChart = () => {
-            const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-            const counts = Array(7).fill(0).map(() => ({ att: 0, miss: 0 }));
-            lectures.filter(l => l.date && isPast(l.date) && !l._unassigned && att[l.id] !== "cancelled" && att[l.id] !== "holiday").forEach(l => {
-                const dow = (new Date(l.date + "T12:00:00").getDay() + 6) % 7; // 0=Mon
-                if (att[l.id] === "attended")
-                    counts[dow].att++;
-                else
-                    counts[dow].miss++;
-            });
-            const maxV = Math.max(...counts.map(c => c.att + c.miss), 1);
-            const bars = days.map((d, i) => {
-                const total = counts[i].att + counts[i].miss;
-                const missH = total > 0 ? Math.round(counts[i].miss / maxV * 60) : 0;
-                const attH = total > 0 ? Math.round(counts[i].att / maxV * 60) : 0;
-                return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1">
-          <div style="font-size:9px;font-weight:700;color:#EF4444">${counts[i].miss > 0 ? counts[i].miss : ""}</div>
-          <div style="width:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:60px;gap:1px">
-            <div style="width:70%;background:#EF4444;height:${missH}px;border-radius:3px 3px 0 0" title="${counts[i].miss} missed"></div>
-            <div style="width:70%;background:#2DB8AB;height:${attH}px" title="${counts[i].att} attended"></div>
-          </div>
-          <div style="font-size:10px;color:#7A5C4F;font-weight:600">${d}</div>
-        </div>`;
-            }).join("");
-            return `<div style="display:flex;gap:4px;align-items:flex-end;padding:8px 0">${bars}</div>
-        <div style="display:flex;gap:12px;font-size:10px;color:#7A5C4F;margin-top:4px">
-          <span><span style="display:inline-block;width:10px;height:10px;background:#2DB8AB;border-radius:2px;margin-right:3px"></span>Attended</span>
-          <span><span style="display:inline-block;width:10px;height:10px;background:#EF4444;border-radius:2px;margin-right:3px"></span>Missed</span>
-        </div>`;
-        };
-        // ── helper: ward Gantt timeline ───────────────────────────────────────────
-        const wardGantt = () => {
-            if (!wardSchedule.length)
-                return '<p style="color:#aaa;font-size:12px">No ward rotations scheduled</p>';
-            const allDates = wardSchedule.flatMap(w => [new Date(w.from + "T12:00:00"), new Date(w.to + "T12:00:00")]);
-            const minD = new Date(Math.min(...allDates)), maxD = new Date(Math.max(...allDates));
-            const span = Math.max((maxD - minD) / (1000 * 60 * 60 * 24), 1);
-            const rows = Object.entries(wardList.reduce((acc, w) => { acc[w.name] = w; return acc; }, {})).map(([name, stats]) => {
-                const wardEntries = wardSchedule.filter(w => w.name === name);
-                const wardEntry = wardSchedule.find(w => w.name === name);
-                const color = (wardEntry && wardEntry.color) ? wardEntry.color : "#800020";
-                const bars = wardEntries.map(w => {
-                    const s = new Date(w.from + "T12:00:00"), e = new Date(w.to + "T12:00:00");
-                    const left = Math.round((s - minD) / (1000 * 60 * 60 * 24) / span * 100);
-                    const width = Math.max(Math.round((e - s) / (1000 * 60 * 60 * 24) / span * 100), 1);
-                    const isPastW = e < new Date();
-                    return `<div style="position:absolute;left:${left}%;width:${width}%;background:${isPastW ? color : color + "80"};height:18px;border-radius:4px;top:0;display:flex;align-items:center;padding:0 4px;overflow:hidden" title="${dispDate(w.from)} → ${dispDate(w.to)}">
-            <span style="font-size:8px;color:#fff;font-weight:700;white-space:nowrap;overflow:hidden">${dispDate(w.from)}</span>
-          </div>`;
-                }).join("");
-                const pctColor = stats.pct >= target ? "#2DB8AB" : "#EF4444";
-                return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-          <div style="width:100px;font-size:11px;font-weight:700;color:#2C1810;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${name}</div>
-          <div style="flex:1;position:relative;height:18px;background:#F3EDE6;border-radius:4px">${bars}</div>
-          <div style="width:40px;font-size:11px;font-weight:800;color:${pctColor};text-align:right;flex-shrink:0">${stats.pct}%</div>
-        </div>`;
-            }).join("");
-            // x-axis month labels
-            const months = [];
-            let d = new Date(minD);
-            while (d <= maxD) {
-                const left = Math.round((d - minD) / (1000 * 60 * 60 * 24) / span * 100);
-                months.push(`<div style="position:absolute;left:${left}%;font-size:9px;color:#7A5C4F;transform:translateX(-50%)">${d.toLocaleDateString("en-IN", { month: "short" })}</div>`);
-                d = new Date(d);
-                d.setMonth(d.getMonth() + 1);
-            }
-            return `<div>${rows}<div style="position:relative;height:16px;margin-left:110px;margin-top:4px">${months.join("")}</div></div>`;
-        };
-        // ── helper: streak calc ───────────────────────────────────────────────────
-        const streakCalc = () => {
-            const held = lectures.filter(l => l.date && isPast(l.date) && !l._unassigned && att[l.id] !== "cancelled" && att[l.id] !== "holiday").sort((a, b) => a.date.localeCompare(b.date));
-            let curAtt = 0, maxAtt = 0, curMiss = 0, maxMiss = 0, tmp = 0, tmpM = 0;
-            held.forEach(l => {
-                if (att[l.id] === "attended") {
-                    tmp++;
-                    tmpM = 0;
-                }
-                else {
-                    tmpM++;
-                    tmp = 0;
-                }
-                if (tmp > maxAtt)
-                    maxAtt = tmp;
-                if (tmpM > maxMiss)
-                    maxMiss = tmpM;
-            });
-            // current streaks from end
-            let i = held.length - 1;
-            curAtt = 0;
-            curMiss = 0;
-            while (i >= 0 && att[held[i].id] === "attended") {
-                curAtt++;
-                i--;
-            }
-            i = held.length - 1;
-            while (i >= 0 && att[held[i].id] !== "attended") {
-                curMiss++;
-                i--;
-            }
-            return { curAtt, maxAtt, curMiss, maxMiss };
-        };
-        // ── helper: projection ────────────────────────────────────────────────────
-        const projection = () => {
-            const subData = subjects.map(s => {
-                const st = subStats(s.id);
-                const rem = st.scheduled - st.total;
-                const projPct = st.scheduled > 0 ? Math.round((st.attended + rem) / st.scheduled * 100) : st.pct;
-                const mustAttend = needMoreFromScheduled(st.attended, st.total, st.scheduled, target);
-                const canSkipN = canSkipFromScheduled(st.attended, st.total, st.scheduled, target);
-                return Object.assign(Object.assign({ name: s.name, color: s.color }, st), { rem, projPct, mustAttend, canSkipN });
-            });
-            return subData;
-        };
-        // ── helper: morning vs evening ward split ─────────────────────────────────
-        const wardSessionSplit = () => {
-            let mAtt = 0, mTotal = 0, eAtt = 0, eTotal = 0;
-            wardSchedule.forEach(w => {
-                let d = new Date(w.from + "T12:00:00");
-                const end = new Date(w.to + "T12:00:00"), td = new Date(todayISO() + "T12:00:00");
-                while (d <= end && d <= td) {
-                    const iso = d.toISOString().slice(0, 10);
-                    wardSessionsOnDate(iso).filter(s => s.label !== "CPC").forEach(s => {
-                        if (s.label === "Morning" || s.session === "Morning") {
-                            mTotal++;
-                            if (wardAtt[s.key] === "attended")
-                                mAtt++;
-                        }
-                        else {
-                            eTotal++;
-                            if (wardAtt[s.key] === "attended")
-                                eAtt++;
-                        }
-                    });
-                    d.setDate(d.getDate() + 1);
-                }
-            });
-            return { mAtt, mTotal, mPct: pct(mAtt, mTotal), eAtt, eTotal, ePct: pct(eAtt, eTotal) };
-        };
-        // ── build data ────────────────────────────────────────────────────────────
-        const strk = streakCalc();
-        const proj = projection();
-        const split = wardSessionSplit();
-        const dangerSubs = subjects.filter(s => subStats(s.id).pct < target).map(s => { const st = subStats(s.id); return Object.assign({ name: s.name, color: s.color }, st); }).sort((a, b) => a.pct - b.pct);
-        const subChartData = subjects.map(s => { const st = subStats(s.id); return Object.assign({ name: s.name, color: s.color }, st); });
-        const wardChartData = wardList.map(w => ({ name: w.name, attended: w.attended, total: w.total, pct: w.pct }));
-        if (cpcStats && cpcStats.total > 0)
-            wardChartData.push({ name: "CPC", attended: cpcStats.attended, total: cpcStats.total, pct: cpcStats.pct });
-        // ── table rows ────────────────────────────────────────────────────────────
-        const modRows = modules.map(m => {
-            const st = moduleStats(m.id);
-            const ok = st.pct >= target;
-            const barW = Math.max(st.pct, 1);
-            return `<tr>
-        <td style="border-left:4px solid ${m.color};padding-left:10px;font-weight:700">${m.name}</td>
-        <td>${st.attended}</td><td>${st.total}</td>
-        <td><div style="background:#F3EDE6;border-radius:5px;height:14px;width:80px;overflow:hidden"><div style="width:${barW}%;height:100%;background:${ok ? "#2DB8AB" : "#EF4444"}"></div></div></td>
-        <td style="font-weight:800;color:${ok ? "#2DB8AB" : "#EF4444"}">${st.pct}%</td>
-      </tr>`;
-        }).join("");
-        const subRows = proj.map(s => {
-            const ok = s.pct >= target;
-            const barW = Math.max(s.pct, 1);
-            const mustStr = s.mustAttend === Infinity ? "❌ Impossible" : s.mustAttend === 0 ? `✅ Skip ${s.canSkipN}` : `⚠️ Need ${s.mustAttend} more`;
-            return `<tr>
-        <td style="border-left:4px solid ${s.color};padding-left:8px;font-weight:600">${s.name}</td>
-        <td>${s.attended}</td><td>${s.total}</td>
-        <td style="color:#EF4444">${s.total - s.attended}</td>
-        <td>${s.scheduled}</td><td style="color:#6C63FF">${s.rem}</td>
-        <td><div style="background:#F3EDE6;border-radius:5px;height:12px;width:70px;overflow:hidden"><div style="width:${barW}%;height:100%;background:${ok ? "#2DB8AB" : "#EF4444"}"></div></div></td>
-        <td style="font-weight:800;color:${ok ? "#2DB8AB" : "#EF4444"}">${s.pct}%</td>
-        <td style="font-size:11px;color:${ok ? "#2DB8AB" : s.mustAttend === Infinity ? "#7A5C4F" : "#EF4444"}">${mustStr}</td>
-      </tr>`;
-        }).join("");
-        const wardSubRows = wardChartData.map(w => {
-            const ok = w.pct >= target;
-            const barW = Math.max(w.pct, 1);
-            return `<tr>
-        <td style="font-weight:600">${w.name}</td>
-        <td>${w.attended}</td><td>${w.total}</td>
-        <td style="color:#EF4444">${w.total - w.attended}</td>
-        <td><div style="background:#F3EDE6;border-radius:5px;height:12px;width:70px;overflow:hidden"><div style="width:${barW}%;height:100%;background:${ok ? "#2DB8AB" : "#EF4444"}"></div></div></td>
-        <td style="font-weight:800;color:${ok ? "#2DB8AB" : "#EF4444"}">${w.pct}%</td>
-      </tr>`;
-        }).join("");
-        const schedRows = wardSchedule.map(w => {
-            const today = todayISO();
-            const isCur = w.from <= today && w.to >= today, isPastW = w.to < today;
-            const badge = isCur ? '<span style="background:#DCFCE7;color:#166534;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">● Active</span>' : isPastW ? '<span style="color:#aaa;font-size:10px">Done</span>' : '<span style="color:#6C63FF;font-size:10px">Upcoming</span>';
-            return `<tr><td style="font-weight:600">${w.name} ${badge}</td><td>${dispDate(w.from)}</td><td>${dispDate(w.to)}</td></tr>`;
-        }).join("");
-        const dangerRows = dangerSubs.map(s => `<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#FFF5F5;border-radius:8px;margin-bottom:5px;border-left:4px solid ${s.color}">
-      <div style="flex:1;font-weight:700;font-size:13px;color:#2C1810">${s.name}</div>
-      <div style="font-size:12px;color:#EF4444;font-weight:800">${s.pct}%</div>
-      <div style="font-size:11px;color:#7A5C4F">Need ${needMore(s.attended, s.total, target)} more</div>
-    </div>`).join("");
-        // ── overall status banner ─────────────────────────────────────────────────
-        const diff = ov.pct - target;
-        const bannerColor = ov.pct >= target ? "#166534" : ov.pct >= target - 5 ? "#92400E" : "#991B1B";
-        const bannerBg = ov.pct >= target ? "#DCFCE7" : ov.pct >= target - 5 ? "#FEF3C7" : "#FEE2E2";
-        const bannerMsg = ov.pct >= target ? `🎉 On Track — ${diff >= 0 ? "+" + diff : diff}% above target`
-            : ov.pct >= target - 5 ? `⚠️ Borderline — ${Math.abs(diff)}% below target. Attend consistently!`
-                : `🚨 Below Target — ${Math.abs(diff)}% deficit. Immediate action needed!`;
-        const win = window.open("", "_blank");
-        if (!win) {
-            alert("Popup blocked! Please allow popups for this site.");
-            return;
-        }
-        win.document.write(`<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LectureTrack — Attendance Report</title>
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#2C1810;font-size:12px}
-  .page{max-width:860px;margin:0 auto;padding:20px 22px 40px}
-  h2{font-size:13px;color:#800020;margin:16px 0 7px;border-bottom:2px solid #DAA520;padding-bottom:4px;font-weight:800}
-  .banner{padding:10px 16px;border-radius:10px;font-weight:700;font-size:13px;margin:10px 0}
-  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}
-  .stat{background:#FFF8E7;border-radius:10px;padding:10px 12px;text-align:center;border:1.5px solid #DAA52040}
-  .stat .v{font-size:20px;font-weight:800;color:#800020}
-  .stat .l{font-size:9px;color:#7A5C4F;margin-top:2px;font-weight:600;text-transform:uppercase}
-  .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;border:1px solid #EDE0D0}
-  .profile-card{background:linear-gradient(135deg,#800020,#9B2335);border-radius:14px;padding:16px 20px;color:#fff;margin-bottom:12px;display:flex;align-items:center;gap:16px}
-  .avatar{width:54px;height:54px;border-radius:50%;background:linear-gradient(135deg,#DAA520,#FFF8E7);display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:#800020;flex-shrink:0;border:2px solid #DAA52080}
-  .prof-info{flex:1}
-  .prof-name{font-size:18px;font-weight:800;letter-spacing:-.3px}
-  .prof-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
-  .prof-tag{background:#ffffff20;border:1px solid #ffffff40;padding:2px 9px;border-radius:12px;font-size:10px;font-weight:600}
-  table{width:100%;border-collapse:collapse;font-size:11px}
-  th{background:#800020;color:#fff;padding:7px 9px;text-align:left;font-size:10px;font-weight:700}
-  td{padding:6px 9px;border-bottom:1px solid #EDE0D0;vertical-align:middle}
-  tr:nth-child(even){background:#FDF6EC}
-  .bar{height:11px;border-radius:4px;background:#F3EDE6;overflow:hidden;min-width:60px}
-  .bar-fill{height:100%;border-radius:4px}
-  .ok{color:#2DB8AB;font-weight:700}.bad{color:#EF4444;font-weight:700}.warn{color:#F59E0B;font-weight:700}
-  .chip{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700}
-  .np{display:inline-block;padding:10px 22px;background:#800020;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:700;margin:4px}
-  .streak-row{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin:6px 0}
-  .streak{background:#FFF8E7;border-radius:9px;padding:9px 10px;border:1px solid #DAA52040;text-align:center}
-  .sv{font-size:20px;font-weight:800}.sl{font-size:9px;color:#7A5C4F;margin-top:1px}
-  .danger{display:flex;align-items:center;gap:8px;padding:7px 10px;background:#FFF5F5;border-radius:8px;margin-bottom:5px}
-  @media print{
-    .np{display:none!important}
-    body{background:#fff}
-    .page-break{page-break-before:always;margin-top:0;padding-top:16px}
-    .page{padding:12px 18px}
-  }
-</style>
-</head><body><div class="page">
-
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-  <div>
-    <div style="font-size:20px;font-weight:800;color:#800020">📊 Attendance Report</div>
-    <div style="font-size:11px;color:#7A5C4F;margin-top:2px">Generated: ${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · Target: <strong>${target}%</strong></div>
-  </div>
-  <button class="np" onclick="window.print()">🖨️ Print / Save PDF</button>
-</div>
-
-${(profile.name || profile.regNo || profile.rollNo || profile.class || profile.college || profile.batch) ? `
-<div class="profile-card">
-  <div class="avatar">${profile.name ? profile.name.trim().charAt(0).toUpperCase() : "S"}</div>
-  <div class="prof-info">
-    ${profile.name ? `<div class="prof-name">${profile.name}</div>` : '<div class="prof-name" style="opacity:.6">Student</div>'}
-    <div class="prof-tags">
-      ${profile.class ? `<span class="prof-tag">🎓 ${profile.class}</span>` : ""}
-      ${profile.batch ? `<span class="prof-tag">📅 ${profile.batch}</span>` : ""}
-      ${profile.regNo ? `<span class="prof-tag">🪪 ${profile.regNo}</span>` : ""}
-      ${profile.rollNo ? `<span class="prof-tag">Roll ${profile.rollNo}</span>` : ""}
-      ${profile.college ? `<span class="prof-tag">🏛️ ${profile.college}</span>` : ""}
-    </div>
-  </div>
-  <div style="text-align:right;flex-shrink:0">
-    <div style="font-size:28px;font-weight:800;color:${ov.pct >= target ? "#4ade80" : "#fca5a5"}">${ov.pct}%</div>
-    <div style="font-size:10px;opacity:.8">Lectures Overall</div>
-    <div style="font-size:11px;margin-top:4px;background:#ffffff20;padding:3px 10px;border-radius:10px">${ov.pct >= target ? "✅ On Track" : "⚠️ Needs Attention"}</div>
-  </div>
-</div>` : `
-<div class="banner" style="background:${bannerBg};color:${bannerColor};border:1.5px solid ${bannerColor}30">${bannerMsg}</div>`}
-
-
-<div class="grid4">
-  <div class="stat"><div class="v">${ov.pct}%</div><div class="l">Lectures</div></div>
-  <div class="stat"><div class="v">${ov.attended}</div><div class="l">Attended</div></div>
-  <div class="stat"><div class="v">${ov.total - ov.attended}</div><div class="l">Missed</div></div>
-  <div class="stat"><div class="v">${ws.pct}%</div><div class="l">Ward Overall</div></div>
-</div>
-
-<div class="streak-row">
-  <div class="streak"><div class="sv" style="color:#22C55E">${strk.curAtt}</div><div class="sl">Current Streak</div></div>
-  <div class="streak"><div class="sv" style="color:#800020">${strk.maxAtt}</div><div class="sl">Best Streak</div></div>
-  <div class="streak"><div class="sv" style="color:#EF4444">${strk.curMiss}</div><div class="sl">Miss Streak</div></div>
-  <div class="streak"><div class="sv" style="color:#7A5C4F">${strk.maxMiss}</div><div class="sl">Worst Miss</div></div>
-</div>
-
-<div class="grid2">
-  <div>
-    <h2>📉 Weekly Trend</h2>
-    <div class="card" style="padding:10px;overflow-x:auto">${weeklyTrend()}</div>
-  </div>
-  <div>
-    <h2>📅 Attendance by Day</h2>
-    <div class="card" style="padding:10px">${dowChart()}</div>
-  </div>
-</div>
-
-${dangerSubs.length > 0 ? `
-<h2>🚨 Danger Zone — Below ${target}%</h2>
-<div class="card" style="padding:10px 14px">${dangerRows}</div>` : ""}
-
-<h2>📊 Subject Attendance</h2>
-<div class="card" style="padding:12px">${hBar(subChartData, target)}</div>
-
-<h2>📚 Subject Detail & Projections</h2>
-<div class="card" style="padding:0;overflow:hidden;overflow-x:auto">
-<table><thead><tr><th>Subject</th><th>Att.</th><th>Held</th><th style="color:#FFAAAA">Abs.</th><th colspan="2">Progress</th><th>Projected</th><th>Action</th></tr></thead><tbody>
-${proj.map(s => {
-            const ok = s.pct >= target;
-            const barW = Math.max(s.pct, 1);
-            const mustStr = s.mustAttend === Infinity ? "❌ Impossible" : s.mustAttend === 0 ? `✅ Skip ${s.canSkipN}` : `⚠️ Need ${s.mustAttend}`;
-            return `<tr>
-    <td style="border-left:4px solid ${s.color};padding-left:8px;font-weight:600">${s.name}</td>
-    <td>${s.attended}</td><td>${s.total}</td>
-    <td style="color:#EF4444">${s.total - s.attended}</td>
-    <td><div class="bar"><div class="bar-fill" style="width:${barW}%;background:${ok ? "#2DB8AB" : "#EF4444"}"></div></div></td>
-    <td class="${ok ? "ok" : "bad"}">${s.pct}%</td>
-    <td class="${s.projPct >= target ? "ok" : "bad"}">${s.projPct}% ${s.projPct >= target ? "✓" : "✗"}</td>
-    <td style="font-size:10px;color:${s.mustAttend === 0 ? "#2DB8AB" : s.mustAttend === Infinity ? "#7A5C4F" : "#EF4444"};font-weight:700">${mustStr}</td>
-  </tr>`;
-        }).join("")}
-</tbody></table>
-</div>
-
-<div class="page-break"></div>
-
-<h2>🏥 Ward Attendance</h2>
-<div class="grid2" style="margin-bottom:0">
-  <div>
-    <div class="card" style="padding:12px">
-      <div style="font-size:11px;font-weight:700;color:#7A5C4F;margin-bottom:6px">SESSIONS OVERVIEW</div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Ward Overall:</span><strong class="${ws.pct >= target ? "ok" : "bad"}">${ws.pct}%</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Attended / Held:</span><strong>${ws.attended}/${ws.total}</strong></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px"><span>Morning Sessions:</span><strong>${split.mPct}% (${split.mAtt}/${split.mTotal})</strong></div>
-      <div style="display:flex;justify-content:space-between"><span>Evening Sessions:</span><strong>${split.ePct}% (${split.eAtt}/${split.eTotal})</strong></div>
-    </div>
-  </div>
-  <div>
-    <div class="card" style="padding:12px">
-      <div style="font-size:11px;font-weight:700;color:#7A5C4F;margin-bottom:6px">WARD TIMELINE</div>
-      ${wardGantt()}
-    </div>
-  </div>
-</div>
-
-<h2>🏥 Ward Attendance by Rotation</h2>
-<div class="card" style="padding:0;overflow:hidden">
-<table><thead><tr><th>Ward / Subject</th><th>Attended</th><th>Total</th><th style="color:#FFAAAA">Absent</th><th colspan="2">Progress</th></tr></thead><tbody>${wardSubRows}</tbody></table>
-</div>
-
-<h2>📋 Ward Rotation Schedule</h2>
-<div class="card" style="padding:0;overflow:hidden">
-<table><thead><tr><th>Ward</th><th>From</th><th>To</th><th>Status</th></tr></thead><tbody>${schedRows}</tbody></table>
-</div>
-
-<div style="text-align:center;margin-top:24px;padding-top:16px;border-top:2px solid #EDE0D0">
-  <button class="np" onclick="window.print()">🖨️ Print / Save PDF</button>
-  <p style="font-size:10px;color:#B09080;margin-top:10px">LectureTrack v3.4 &nbsp;·&nbsp; Generated ${new Date().toLocaleString("en-IN")}</p>
-</div>
-
-</div></body></html>`);
-        win.document.close();
-    };
     const ov = overall(), ws = wardStats();
     return (React.createElement("div", { style: { fontFamily: "'DM Sans','Segoe UI',sans-serif", background: T.bg, minHeight: "100vh", maxWidth: 480, margin: "0 auto", paddingBottom: 80 } },
         React.createElement("style", null, `
@@ -1204,8 +984,7 @@ ${proj.map(s => {
                 React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-end" } },
                     React.createElement("div", { style: { display: "flex", gap: 5 } },
                         React.createElement("button", { className: "btn", onClick: () => setProfileOpen(true), style: { padding: "6px 10px", background: "#ffffff20", color: "#fff", fontSize: 11, border: `1px solid ${T.goldLight}50` } }, "\uD83D\uDC64 Profile"),
-                        React.createElement("button", { className: "btn", onClick: () => setExportOpen(true), style: { padding: "6px 10px", background: "#ffffff20", color: "#fff", fontSize: 11, border: `1px solid ${T.goldLight}50` } }, "\uD83D\uDCBE Export")),
-                    React.createElement("button", { className: "btn", onClick: printReport, style: { padding: "6px 13px", background: "#ffffff25", color: "#fff", fontSize: 11, border: `1px solid ${T.goldLight}50`, width: "100%" } }, "\uD83D\uDDA8\uFE0F Report"))),
+                        React.createElement("button", { className: "btn", onClick: () => setExportOpen(true), style: { padding: "6px 10px", background: "#ffffff20", color: "#fff", fontSize: 11, border: `1px solid ${T.goldLight}50` } }, "\uD83D\uDCBE Export"))),
             React.createElement("div", { style: { display: "flex", gap: 7 } }, [{ v: `${ov.pct}%`, l: "Lectures" }, { v: ov.attended, l: "Attended" }, { v: ov.total, l: "Held" }, { v: `${ws.pct}%`, l: "Wards" }].map(s => (React.createElement("div", { key: s.l, style: { flex: 1, background: "#ffffff18", borderRadius: 12, padding: "9px 5px", textAlign: "center", border: `1px solid ${T.goldLight}40` } },
                 React.createElement("div", { style: { fontSize: 17, fontWeight: 800, color: "#fff" } }, s.v),
                 React.createElement("div", { style: { fontSize: 9, color: T.goldPale, marginTop: 1 } }, s.l)))))),
@@ -1250,7 +1029,7 @@ ${proj.map(s => {
         exportOpen && React.createElement(Modal, { onClose: () => setExportOpen(false) },
             React.createElement(ExportSheet, { onExport: exportBackup, onImportOpen: () => { setExportOpen(false); setImportBackupOpen(true); }, onClose: () => setExportOpen(false), profile: profile })),
         importBackupOpen && React.createElement(Modal, { onClose: () => setImportBackupOpen(false) },
-            React.createElement(ImportBackupSheet, { onImport: importBackup, onClose: () => setImportBackupOpen(false) }))));
+            React.createElement(ImportBackupSheet, { onImport: importBackup, onClose: () => setImportBackupOpen(false) })))));
 }
 function Modal({ children, onClose }) {
     return (React.createElement("div", { className: "overlay", onClick: onClose },
@@ -2742,6 +2521,7 @@ function ImportBackupSheet({ onImport, onClose }) {
 
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+// ══════════════════════════════════════════════════════
 </script>
 </body>
 </html>
